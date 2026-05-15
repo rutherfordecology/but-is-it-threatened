@@ -144,6 +144,51 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 .note a { color: var(--green); text-decoration: none; }
 .note a:hover { text-decoration: underline; }
 
+/* Citation banner */
+.citation-banner { background: var(--blue-light); border: 0.5px solid var(--blue-mid); border-radius: var(--radius); padding: 9px 12px; margin-top: 0.7rem; font-size: 12px; color: var(--blue); line-height: 1.6; display: none; }
+.citation-banner strong { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 3px; color: var(--blue); }
+.citation-doi { font-family: monospace; font-size: 11px; word-break: break-all; }
+.citation-doi a { color: var(--blue); }
+.citation-copy { margin-top: 5px; padding: 3px 8px; font-size: 11px; font-family: var(--font-sans); background: var(--surface); border: 0.5px solid var(--blue-mid); border-radius: 3px; color: var(--blue); cursor: pointer; }
+.citation-copy:hover { background: #d0e4f5; }
+
+/* Quality flags */
+.quality-box { background: var(--amber-light); border: 0.5px solid var(--amber-mid); border-radius: var(--radius); padding: 9px 12px; margin-top: 0.7rem; font-size: 12px; color: var(--amber); line-height: 1.6; display: none; }
+.quality-box strong { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; color: var(--amber); }
+.quality-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
+.quality-val { font-weight: 600; }
+.quality-flag-warn { color: var(--red); }
+
+/* Species richness per polygon */
+.richness-box { margin-top: 0.7rem; display: none; }
+.richness-box strong { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-bottom: 5px; }
+.richness-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 8px; border-radius: 4px; background: var(--surface2); margin-bottom: 3px; }
+.richness-name { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.richness-val { color: var(--green-dark); font-weight: 600; flex-shrink: 0; margin-left: 8px; }
+
+/* About modal */
+.about-btn { background: none; border: none; cursor: pointer; font-size: 13px; color: rgba(255,255,255,0.6); padding: 4px 8px; border-radius: 4px; font-family: var(--font-sans); }
+.about-btn:hover { background: rgba(255,255,255,0.1); color: white; }
+.about-modal { max-width: 520px; }
+.about-modal h2 { color: var(--green-dark); font-size: 17px; }
+.about-modal h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 1rem 0 0.35rem; }
+.about-modal p { font-size: 13px; color: var(--text2); line-height: 1.7; margin-bottom: 0; }
+.about-modal ul { font-size: 13px; color: var(--text2); line-height: 1.7; padding-left: 1.2rem; margin-bottom: 0.5rem; }
+.about-modal .licence-badge { display: inline-block; background: var(--green-light); border: 0.5px solid var(--green-mid); color: var(--green-dark); border-radius: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; margin-right: 4px; }
+
+/* Mobile responsiveness */
+@media (max-width: 700px) {
+  body { overflow: auto; }
+  .layout { grid-template-columns: 1fr; height: auto; overflow: visible; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; }
+  #map-wrap { height: 60vw; min-height: 260px; position: relative; }
+  #map { position: absolute; inset: 0; }
+  .checklist-panel { width: 100%; height: 380px; top: auto; bottom: 0; transform: translateY(100%); }
+  .checklist-panel.open { transform: translateY(0); }
+  .header-right { display: none; }
+  .metrics { grid-template-columns: repeat(3, 1fr); }
+}
+
 .taxon-dropdown { position: relative; }
 .taxon-dropdown-trigger { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 9px; font-size: 13px; cursor: pointer; background: var(--surface); user-select: none; }
 .taxon-dropdown-trigger:hover { border-color: var(--green); }
@@ -167,7 +212,9 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
     <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">· GBIF Occurrence Extractor</span>
   </div>
-  <div class="header-right">
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <button class="about-btn" id="aboutBtn">&#9432; About</button>
+    <span style="opacity:0.3">|</span>
     Powered by GBIF &amp; OpenStreetMap &nbsp;·&nbsp;
     <a href="mailto:Rutherfordecology@gmail.com" style="color:rgba(255,255,255,0.7);font-weight:400;">Feedback</a> &nbsp;·&nbsp;
     <a href="https://buymeacoffee.com/rutherfordecology" target="_blank" style="color:#d4a84b;font-weight:500;">&#9749; Buy me a coffee</a>
@@ -258,7 +305,29 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 
     <div class="sidebar-section" id="outputSection" style="display:none">
       <div class="section-label">4 · Output</div>
-      <div class="tool-row">
+
+      <!-- GBIF Citation -->
+      <div class="citation-banner" id="citationBanner">
+        <strong>&#128203; GBIF Citation &mdash; please cite this download</strong>
+        <div class="citation-doi" id="citationDoi"></div>
+        <button class="citation-copy" id="citationCopyBtn">Copy citation</button>
+      </div>
+
+      <!-- Data quality summary -->
+      <div class="quality-box" id="qualityBox">
+        <strong>&#9888; Data quality flags</strong>
+        <div class="quality-row"><span>Records without coordinates</span><span class="quality-val" id="qNoCoord">-</span></div>
+        <div class="quality-row"><span>Records with geospatial issues</span><span class="quality-val" id="qGeoIssue">-</span></div>
+        <div class="quality-row"><span>High coord. uncertainty (&gt;1 km)</span><span class="quality-val" id="qHighUncert">-</span></div>
+      </div>
+
+      <!-- Species richness per polygon -->
+      <div class="richness-box" id="richnessBox">
+        <strong>Species richness per polygon</strong>
+        <div id="richnessList"></div>
+      </div>
+
+      <div class="tool-row" style="margin-top:0.6rem;">
         <button class="tool-btn active" id="btnPoints" onclick="setViewMode('points')">Points</button>
         <button class="tool-btn" id="btnHeat" onclick="setViewMode('heat')">Heatmap</button>
       </div>
@@ -320,6 +389,40 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
   </div>
 </div>
 
+<!-- About modal -->
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal about-modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">
+    <h2>&#127807; GBIF Occurrence Extractor</h2>
+    <p>A free, browser-based tool that lets ecologists, conservation planners, and environmental consultants extract biodiversity occurrence data from <a href="https://www.gbif.org" target="_blank" style="color:var(--green);">GBIF</a> for any user-defined polygon — with no login, no record limits, and no software to install.</p>
+
+    <h3>How it works</h3>
+    <ul>
+      <li>Draw a polygon on the map or upload a KML/KMZ file</li>
+      <li>Select taxon groups and date range</li>
+      <li>The tool submits a download request to the GBIF occurrence API and polls until ready</li>
+      <li>Records are parsed, mapped, and exported &mdash; all in your browser</li>
+    </ul>
+
+    <h3>Who it&#39;s for</h3>
+    <p>Ecologists, EIA consultants, conservation planners, citizen scientists, and anyone who needs a quick, clean spatial extract of GBIF data without navigating the main portal.</p>
+
+    <h3>Data &amp; citation</h3>
+    <p>All data is sourced from GBIF. Every download generates a citable DOI &mdash; shown after each fetch. Please cite GBIF when publishing results based on this tool.</p>
+    <p style="margin-top:0.5rem;">Suggested tool citation:<br>
+    <em style="font-size:12px;color:var(--text3);">Rutherford Ecology (2025). GBIF Occurrence Extractor. https://rutherfordecology.netlify.app</em></p>
+
+    <h3>Licence &amp; source</h3>
+    <p><span class="licence-badge">MIT</span> Open source &mdash; free to use, adapt, and share. View source on <a href="https://github.com/rutherfordecology" target="_blank" style="color:var(--green);">GitHub</a>.</p>
+
+    <h3>Built by</h3>
+    <p><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank" style="color:var(--green);">Rutherford Ecology</a> &mdash; <a href="mailto:rutherfordecology@gmail.com" style="color:var(--green);">rutherfordecology@gmail.com</a></p>
+
+    <div class="modal-btns" style="margin-top:1.2rem;">
+      <button class="modal-btn primary" id="aboutClose">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Disclaimer modal -->
 <div class="modal-overlay open" id="disclaimerModal">
   <div class="modal" style="max-width:480px">
@@ -366,7 +469,7 @@ const TAXON_COLOURS = {
   'Fungi':           { colour: '#D97706', label: 'Fungi' },
   'Other':           { colour: '#6B7280', label: 'Other' }
 };
-const CSV_FIELDS = ['gbifID','eventDate','year','month','day','scientificName','vernacularName','kingdom','phylum','class','order','family','genus','species','decimalLatitude','decimalLongitude','coordinateUncertaintyInMeters','basisOfRecord','occurrenceID','taxonKey','datasetName','country','stateProvince','locality','recordedBy'];
+const CSV_FIELDS = ['gbifID','eventDate','year','month','day','scientificName','vernacularName','kingdom','phylum','class','order','family','genus','species','decimalLatitude','decimalLongitude','coordinateUncertaintyInMeters','hasGeospatialIssues','basisOfRecord','occurrenceID','taxonKey','datasetName','country','stateProvince','locality','recordedBy'];
 
 // Map
 const map = L.map('map').setView([-41.5, 172.5], 5);
@@ -483,8 +586,15 @@ function getTaxonGroup(r) {
   if (kingdom === 'Chromista') return 'Algae';
   if (ALGAE_PHYLA.has(phylum)) return 'Algae';
 
-  // Fungi
+  // Fungi — catch by kingdom OR by phylum/class since kingdom is often blank in GBIF SIMPLE_CSV
+  // Major fungal phyla: Basidiomycota, Ascomycota (incl. lichens), Zygomycota, Chytridiomycota,
+  // Glomeromycota, Mucoromycota, Blastocladiomycota, Microsporidia, Rozellomycota
   if (kingdom === 'Fungi') return 'Fungi';
+  if (phylum === 'Basidiomycota' || phylum === 'Ascomycota' || phylum === 'Zygomycota' ||
+      phylum === 'Chytridiomycota' || phylum === 'Glomeromycota' || phylum === 'Mucoromycota' ||
+      phylum === 'Blastocladiomycota' || phylum === 'Microsporidia' || phylum === 'Rozellomycota' ||
+      phylum === 'Neocallimastigomycota' || phylum === 'Zoopagomycota' || phylum === 'Entomophthoromycota' ||
+      phylum === 'Kickxellomycota' || phylum === 'Mortierellomycota' || phylum === 'Calcarisporiellomycota') return 'Fungi';
 
   return 'Other';
 }
@@ -498,6 +608,9 @@ function clearResults() {
   allRecords = []; activeFilters.clear(); csvData = null; selectedSpecies = null; allMarkers = []; commonNameCache = {};
   metricsGrid.style.display = 'none'; filterSection.style.display = 'none';
   legend.style.display = 'none'; outputSection.style.display = 'none';
+  document.getElementById('citationBanner').style.display = 'none';
+  document.getElementById('qualityBox').style.display = 'none';
+  document.getElementById('richnessBox').style.display = 'none';
   statusBar.style.display = 'none'; progressWrap.style.display = 'none';
   checklistPanel.classList.remove('open');
   clScroll.innerHTML = ''; clSelectedInfo.style.display = 'none';
@@ -606,6 +719,17 @@ function parseKML(text) {
 }
 
 // Modals
+// About modal
+document.getElementById('aboutBtn').addEventListener('click', () => {
+  document.getElementById('aboutModal').classList.add('open');
+});
+document.getElementById('aboutClose').addEventListener('click', () => {
+  document.getElementById('aboutModal').classList.remove('open');
+});
+document.getElementById('aboutModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('aboutModal')) document.getElementById('aboutModal').classList.remove('open');
+});
+
 document.getElementById('disclaimerAccept').addEventListener('click', () => {
   document.getElementById('disclaimerModal').classList.remove('open');
 });
@@ -682,52 +806,117 @@ function licenceBadge(licenceUrl) {
 }
 
 // Map rendering
-function makeMarker(record) {
-  const lat = record.decimalLatitude, lng = record.decimalLongitude;
-  if (lat == null || lng == null) return null;
-  const fillColour = getTaxonColour(record);
-  const marker = L.circleMarker([lat, lng], { radius: 6, fillColor: fillColour, color: '#fff', weight: 1, fillOpacity: 0.85 });
-
-  const commonName = record.vernacularName ? '<br><span style="color:#6b6960;font-size:11px;">' + record.vernacularName + '</span>' : '';
-  const date   = record.eventDate   ? '<br><b>Date:</b> '   + record.eventDate   : '';
-  const source = record.datasetName ? '<br><b>Source:</b> ' + record.datasetName : '';
-  const gbifId = record.gbifID;
-  const link   = gbifId ? '<br><a href="https://www.gbif.org/occurrence/' + gbifId + '" target="_blank" rel="noopener" style="color:#2a7a58;">View on GBIF &#8599;</a>' : '';
-
+// Build popup content for a single record
+function buildRecordPage(rec) {
+  const commonName = rec.vernacularName ? '<div style="color:#6b6960;font-size:11px;margin-top:1px;">' + rec.vernacularName + '</div>' : '';
+  const cls    = rec.class ? '<div style="color:#9b9890;font-size:11px;font-style:italic;">' + rec.class + '</div>' : '';
+  const date   = rec.eventDate   ? '<div style="margin-top:4px;font-size:12px;"><b>Date:</b> '   + rec.eventDate + '</div>' : '';
+  const source = rec.datasetName ? '<div style="font-size:12px;"><b>Source:</b> ' + rec.datasetName + '</div>' : '';
+  const uncert = rec.coordinateUncertaintyInMeters ? '<div style="font-size:11px;color:#9b9890;">Coord. uncertainty: ' + parseFloat(rec.coordinateUncertaintyInMeters).toLocaleString() + ' m</div>' : '';
+  const geoWarn = rec.hasGeospatialIssues === 'true' ? '<div style="font-size:11px;color:#8a2c2c;margin-top:2px;">\u26a0 Geospatial issues flagged</div>' : '';
+  const gbifId = rec.gbifID;
+  const link   = gbifId ? '<div style="margin-top:4px;"><a href="https://www.gbif.org/occurrence/' + gbifId + '" target="_blank" rel="noopener" style="color:#2a7a58;font-size:12px;">View on GBIF \u2197</a></div>' : '';
   const photoId = 'gbif-photo-' + (gbifId || Math.random().toString(36).slice(2));
-  const photoSlot = '<div id="' + photoId + '" style="margin:6px 0 4px;"></div>';
+  return {
+    html: '<div id="' + photoId + '" style="margin-bottom:5px;"></div>' +
+          '<div style="font-weight:600;font-size:13px;">' + (rec.scientificName || 'Unknown') + '</div>' +
+          commonName + cls + date + source + uncert + geoWarn + link,
+    photoId,
+    taxonKey: rec.taxonKey,
+    scientificName: rec.scientificName || ''
+  };
+}
 
-  marker.bindPopup(
-    photoSlot +
-    '<b>' + (record.scientificName || 'Unknown') + '</b>' + commonName +
-    (record.class ? '<br><i style="color:#9b9890;font-size:11px;">' + record.class + '</i>' : '') +
-    date + source + link,
-    { maxWidth: 270 }
-  );
+async function loadPopupPhoto(photoId, taxonKey, sciName) {
+  const slot = document.getElementById(photoId);
+  if (!slot || slot.dataset.loaded) return;
+  slot.dataset.loaded = '1';
+  slot.innerHTML = '<div style="font-size:11px;color:#9b9890;padding:2px 0;">Loading photo\u2026</div>';
+  const photo = await fetchSpeciesPhoto(taxonKey);
+  if (!slot.isConnected) return;
+  if (photo) {
+    slot.innerHTML =
+      '<img src="' + photo.url + '" alt="' + (sciName || '') + '" ' +
+      'style="width:100%;max-height:140px;object-fit:cover;border-radius:4px;display:block;" ' +
+      'onerror="this.parentElement.innerHTML=\'\'"> ' +
+      '<div style="font-size:10px;color:#9b9890;margin-top:3px;line-height:1.4;">' +
+      licenceBadge(photo.licence) + (photo.photographer || '') + '</div>';
+  } else {
+    slot.innerHTML = '';
+  }
+}
 
-  marker.on('popupopen', async () => {
-    const slot = document.getElementById(photoId);
-    if (!slot || slot.dataset.loaded) return;
-    slot.dataset.loaded = '1';
-    slot.innerHTML = '<div style="font-size:11px;color:#9b9890;padding:2px 0;">Loading photo…</div>';
-    const photo = await fetchSpeciesPhoto(record.taxonKey);
-    if (!slot.isConnected) return; // popup closed while loading
-    if (photo) {
-      slot.innerHTML =
-        '<img src="' + photo.url + '" alt="' + (record.scientificName || '') + '" ' +
-        'style="width:100%;max-height:160px;object-fit:cover;border-radius:4px;display:block;" ' +
-        'onerror="this.parentElement.innerHTML=\'\'"> ' +
-        '<div style="font-size:10px;color:#9b9890;margin-top:3px;line-height:1.4;">' +
-        licenceBadge(photo.licence) +
-        (photo.photographer ? photo.photographer : '') +
-        '</div>';
-    } else {
-      slot.innerHTML = '';
-    }
+window._gbifPopupState = {};
+window._gbifPopupNav = function(pid, dir) {
+  const state = window._gbifPopupState[pid];
+  if (!state) return;
+  state.idx = (state.idx + dir + state.sorted.length) % state.sorted.length;
+  const rec = state.sorted[state.idx];
+  const page = buildRecordPage(rec);
+  const total = state.sorted.length;
+  const speciesSet = [...new Set(state.sorted.map(r => r.scientificName || r.species).filter(Boolean))];
+  const summ = speciesSet.slice(0, 6).join(', ') + (speciesSet.length > 6 ? ' +' + (speciesSet.length - 6) + ' more' : '');
+  const header = '<div style="font-size:11px;color:#2a7a58;font-weight:600;margin-bottom:5px;line-height:1.4;">\ud83d\udccd ' + total + ' records at this location<br><span style="font-weight:400;color:#6b6960;">' + summ + '</span></div>';
+  const counter = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;padding-bottom:6px;border-bottom:1px solid #eee;">' +
+    '<button onclick="window._gbifPopupNav(\'' + pid + '\',-1)" style="border:1px solid #ddd;background:#f5f5f3;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:14px;">\u2039</button>' +
+    '<span style="font-size:11px;color:#6b6960;">Record <b>' + (state.idx+1) + '</b> of <b>' + total + '</b></span>' +
+    '<button onclick="window._gbifPopupNav(\'' + pid + '\',1)" style="border:1px solid #ddd;background:#f5f5f3;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:14px;">\u203a</button>' +
+    '</div>';
+  state.popup.setContent(header + counter + page.html);
+  setTimeout(() => loadPopupPhoto(page.photoId, rec.taxonKey, rec.scientificName), 50);
+};
+
+function makeStackedPopup(stackedRecords) {
+  const sorted = stackedRecords.slice().sort((a, b) => ((b.eventDate||'').localeCompare(a.eventDate||'')));
+  const total = sorted.length;
+  const speciesSet = [...new Set(sorted.map(r => r.scientificName || r.species).filter(Boolean))];
+  const summ = speciesSet.slice(0, 6).join(', ') + (speciesSet.length > 6 ? ' +' + (speciesSet.length - 6) + ' more' : '');
+  const popupId = 'mp-' + Math.random().toString(36).slice(2);
+
+  const popup = L.popup({ maxWidth: 290, minWidth: 240 });
+  window._gbifPopupState[popupId] = { idx: 0, sorted, popup };
+
+  function buildContent(idx) {
+    const rec = sorted[idx];
+    const page = buildRecordPage(rec);
+    const header = total > 1
+      ? '<div style="font-size:11px;color:#2a7a58;font-weight:600;margin-bottom:5px;line-height:1.4;">\ud83d\udccd ' + total + ' records at this location<br><span style="font-weight:400;color:#6b6960;">' + summ + '</span></div>'
+      : '';
+    const counter = total > 1
+      ? '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;padding-bottom:6px;border-bottom:1px solid #eee;">' +
+          '<button onclick="window._gbifPopupNav(\'' + popupId + '\',-1)" style="border:1px solid #ddd;background:#f5f5f3;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:14px;">\u2039</button>' +
+          '<span style="font-size:11px;color:#6b6960;">Record <b>' + (idx+1) + '</b> of <b>' + total + '</b></span>' +
+          '<button onclick="window._gbifPopupNav(\'' + popupId + '\',1)" style="border:1px solid #ddd;background:#f5f5f3;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:14px;">\u203a</button>' +
+        '</div>'
+      : '';
+    return { fullHtml: header + counter + page.html, page };
+  }
+
+  const { fullHtml, page } = buildContent(0);
+  popup.setContent(fullHtml);
+  popup.on('add', () => setTimeout(() => loadPopupPhoto(page.photoId, sorted[0].taxonKey, sorted[0].scientificName), 50));
+  return popup;
+}
+
+function makeMarker(stackedRecords) {
+  const rep = stackedRecords[0];
+  const lat = rep.decimalLatitude, lng = rep.decimalLongitude;
+  if (lat == null || lng == null) return null;
+
+  const groups = [...new Set(stackedRecords.map(r => getTaxonGroup(r)))];
+  const fillColour = groups.length === 1 ? getTaxonColour(rep) : '#6B7280';
+  const radius = stackedRecords.length === 1 ? 6 : Math.min(11, 6 + Math.log2(stackedRecords.length));
+
+  const marker = L.circleMarker([lat, lng], {
+    radius, fillColor: fillColour, color: '#fff',
+    weight: stackedRecords.length > 1 ? 2 : 1, fillOpacity: 0.85
   });
 
-  marker._taxonGroup  = getTaxonGroup(record);
-  marker._speciesName = record.species || record.scientificName || '';
+  marker.bindPopup(makeStackedPopup(stackedRecords));
+  marker._groups       = new Set(groups);
+  marker._taxonGroup   = groups.length === 1 ? groups[0] : null;
+  marker._speciesNames = new Set(stackedRecords.map(r => r.species || r.scientificName || '').filter(Boolean));
+  marker._stackSize    = stackedRecords.length;
   return marker;
 }
 
@@ -736,12 +925,28 @@ function renderPoints(records) {
   if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
   if (heatLayer)    { map.removeLayer(heatLayer); }
   clusterLayer = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 14 });
+
   const filtered = records.filter(passesFilters);
-  let shown = 0;
+
+  // Group records by exact lat/lng so stacked points share one marker
+  const locationMap = new Map();
   filtered.forEach(r => {
-    const m = makeMarker(r);
-    if (m) { clusterLayer.addLayer(m); allMarkers.push({ marker: m, record: r }); shown++; }
+    if (r.decimalLatitude == null || r.decimalLongitude == null) return;
+    const key = r.decimalLatitude.toFixed(6) + ',' + r.decimalLongitude.toFixed(6);
+    if (!locationMap.has(key)) locationMap.set(key, []);
+    locationMap.get(key).push(r);
   });
+
+  let shown = 0;
+  locationMap.forEach(stack => {
+    const m = makeMarker(stack);
+    if (m) {
+      clusterLayer.addLayer(m);
+      stack.forEach(r => allMarkers.push({ marker: m, record: r }));
+      shown += stack.length;
+    }
+  });
+
   map.addLayer(clusterLayer);
   document.getElementById('mShown').textContent = shown.toLocaleString();
   csvData = buildCSV(filtered);
@@ -769,14 +974,22 @@ function setViewMode(mode) {
 
 // Species highlighting
 function applySpeciesHighlight(name) {
+  const seen = new Set();
   allMarkers.forEach(({ marker }) => {
-    const isMatch = marker._speciesName === name;
-    marker.setStyle({ fillOpacity: isMatch ? 1 : 0.1, opacity: isMatch ? 1 : 0.15, radius: isMatch ? 9 : 4 });
+    if (seen.has(marker)) return; seen.add(marker);
+    const isMatch = marker._speciesNames ? marker._speciesNames.has(name) : false;
+    const baseRadius = marker._stackSize > 1 ? Math.min(11, 6 + Math.log2(marker._stackSize)) : 6;
+    marker.setStyle({ fillOpacity: isMatch ? 1 : 0.1, opacity: isMatch ? 1 : 0.15, radius: isMatch ? baseRadius + 3 : Math.max(3, baseRadius - 2) });
     if (isMatch) marker.bringToFront();
   });
 }
 function clearSpeciesHighlight() {
-  allMarkers.forEach(({ marker }) => marker.setStyle({ fillOpacity: 0.85, opacity: 1, radius: 6 }));
+  const seen = new Set();
+  allMarkers.forEach(({ marker }) => {
+    if (seen.has(marker)) return; seen.add(marker);
+    const baseRadius = marker._stackSize > 1 ? Math.min(11, 6 + Math.log2(marker._stackSize)) : 6;
+    marker.setStyle({ fillOpacity: 0.85, opacity: 1, radius: baseRadius });
+  });
 }
 function selectSpecies(name) {
   selectedSpecies = name;
@@ -1028,6 +1241,7 @@ runBtn.addEventListener('click', async () => {
       }
       downloadKey = await res.text();
       downloadKey = downloadKey.replace(/"/g, '').trim();
+      window._lastDownloadKey = downloadKey; // store for citation
     } catch(e) {
       if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('CORS')) {
         setStatus('Browser security is blocking the authenticated request. Please use the tool from a hosted URL (Netlify), not a local file.', 'error');
@@ -1119,9 +1333,66 @@ runBtn.addEventListener('click', async () => {
   renderPoints(allFetched);
   csvData = buildCSV(allFetched);
   outputSection.style.display = 'block';
+
+  // Show citation, quality flags, and richness summary
+  if (window._lastDownloadKey) showCitation(window._lastDownloadKey);
+  showQualityFlags(allFetched);
+  showRichness(allFetched);
+
   setStatus(allFetched.length.toLocaleString() + ' records loaded — complete dataset from GBIF.', 'success');
   runBtn.disabled = false;
 });
+
+// Citation copy
+document.getElementById('citationCopyBtn').addEventListener('click', () => {
+  const text = document.getElementById('citationDoi').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('citationCopyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy citation', 1800);
+  });
+});
+
+// Show GBIF citation banner
+function showCitation(downloadKey) {
+  const doi = 'https://doi.org/10.15468/dl.' + downloadKey.toLowerCase();
+  const citation = 'GBIF.org (' + new Date().getFullYear() + '), GBIF Occurrence Download, ' + doi;
+  document.getElementById('citationDoi').textContent = citation;
+  document.getElementById('citationBanner').style.display = 'block';
+}
+
+// Show data quality flags
+function showQualityFlags(records) {
+  const total = records.length;
+  if (total === 0) return;
+  const noCoord    = records.filter(r => r.decimalLatitude == null || r.decimalLongitude == null).length;
+  const geoIssue   = records.filter(r => r.hasGeospatialIssues === 'true').length;
+  const highUncert = records.filter(r => parseFloat(r.coordinateUncertaintyInMeters) > 1000).length;
+  function fmtQ(el, n) {
+    el.textContent = n === 0 ? '0' : n.toLocaleString() + ' (' + Math.round(100*n/total) + '%)';
+    el.className = 'quality-val' + (n > 0 ? ' quality-flag-warn' : '');
+  }
+  fmtQ(document.getElementById('qNoCoord'),    noCoord);
+  fmtQ(document.getElementById('qGeoIssue'),   geoIssue);
+  fmtQ(document.getElementById('qHighUncert'), highUncert);
+  document.getElementById('qualityBox').style.display = 'block';
+}
+
+// Show per-polygon species richness
+function showRichness(records) {
+  if (polygons.length < 2) { document.getElementById('richnessBox').style.display = 'none'; return; }
+  const richnessList = document.getElementById('richnessList');
+  richnessList.innerHTML = '';
+  polygons.forEach(p => {
+    const polyRecs = records.filter(r => r._polyId === p.id);
+    const species = new Set(polyRecs.map(r => r.species || r.scientificName).filter(Boolean));
+    const row = document.createElement('div'); row.className = 'richness-row';
+    row.innerHTML = '<span class="richness-name" title="' + p.label + '">' + p.label + '</span>' +
+      '<span class="richness-val">' + species.size + ' spp &nbsp;/&nbsp; ' + polyRecs.length.toLocaleString() + ' rec</span>';
+    richnessList.appendChild(row);
+  });
+  document.getElementById('richnessBox').style.display = 'block';
+}
 
 // Export
 function buildCSV(rows) {
