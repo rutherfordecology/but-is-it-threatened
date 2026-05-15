@@ -641,23 +641,91 @@ async function lookupCommonNames(records) {
   records.forEach(r => { if (r.taxonKey && commonNameCache[r.taxonKey]) r.vernacularName = r.vernacularName || commonNameCache[r.taxonKey]; });
 }
 
+// CC photo cache: taxonKey → { url, licence, photographer } or null
+const photoCache = {};
+
+async function fetchSpeciesPhoto(taxonKey) {
+  if (!taxonKey) return null;
+  if (photoCache[taxonKey] !== undefined) return photoCache[taxonKey];
+  photoCache[taxonKey] = null; // prevent duplicate fetches
+  try {
+    const res = await fetch('https://api.gbif.org/v1/occurrence/search?taxonKey=' + taxonKey + '&mediaType=StillImage&limit=5');
+    if (!res.ok) return null;
+    const json = await res.json();
+    for (const occ of (json.results || [])) {
+      const img = (occ.media || []).find(m => m.type === 'StillImage' && m.identifier);
+      if (img) {
+        photoCache[taxonKey] = {
+          url: img.identifier,
+          licence: img.license || '',
+          photographer: img.rightsHolder || img.creator || ''
+        };
+        return photoCache[taxonKey];
+      }
+    }
+  } catch(e) {}
+  return null;
+}
+
+function licenceBadge(licenceUrl) {
+  if (!licenceUrl) return '';
+  const lower = licenceUrl.toLowerCase();
+  let label = 'CC';
+  if (lower.includes('by-nc-sa')) label = 'CC BY-NC-SA';
+  else if (lower.includes('by-nc-nd')) label = 'CC BY-NC-ND';
+  else if (lower.includes('by-nc'))   label = 'CC BY-NC';
+  else if (lower.includes('by-sa'))   label = 'CC BY-SA';
+  else if (lower.includes('by-nd'))   label = 'CC BY-ND';
+  else if (lower.includes('by'))      label = 'CC BY';
+  else if (lower.includes('cc0') || lower.includes('publicdomain')) label = 'CC0';
+  return '<span style="display:inline-block;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;background:#e8f4ef;color:#1a5940;border:0.5px solid #6dba9a;margin-right:4px;">' + label + '</span>';
+}
+
 // Map rendering
 function makeMarker(record) {
   const lat = record.decimalLatitude, lng = record.decimalLongitude;
   if (lat == null || lng == null) return null;
   const fillColour = getTaxonColour(record);
   const marker = L.circleMarker([lat, lng], { radius: 6, fillColor: fillColour, color: '#fff', weight: 1, fillOpacity: 0.85 });
+
   const commonName = record.vernacularName ? '<br><span style="color:#6b6960;font-size:11px;">' + record.vernacularName + '</span>' : '';
   const date   = record.eventDate   ? '<br><b>Date:</b> '   + record.eventDate   : '';
   const source = record.datasetName ? '<br><b>Source:</b> ' + record.datasetName : '';
   const gbifId = record.gbifID;
   const link   = gbifId ? '<br><a href="https://www.gbif.org/occurrence/' + gbifId + '" target="_blank" rel="noopener" style="color:#2a7a58;">View on GBIF &#8599;</a>' : '';
+
+  const photoId = 'gbif-photo-' + (gbifId || Math.random().toString(36).slice(2));
+  const photoSlot = '<div id="' + photoId + '" style="margin:6px 0 4px;"></div>';
+
   marker.bindPopup(
+    photoSlot +
     '<b>' + (record.scientificName || 'Unknown') + '</b>' + commonName +
     (record.class ? '<br><i style="color:#9b9890;font-size:11px;">' + record.class + '</i>' : '') +
     date + source + link,
-    { maxWidth: 260 }
+    { maxWidth: 270 }
   );
+
+  marker.on('popupopen', async () => {
+    const slot = document.getElementById(photoId);
+    if (!slot || slot.dataset.loaded) return;
+    slot.dataset.loaded = '1';
+    slot.innerHTML = '<div style="font-size:11px;color:#9b9890;padding:2px 0;">Loading photo…</div>';
+    const photo = await fetchSpeciesPhoto(record.taxonKey);
+    if (!slot.isConnected) return; // popup closed while loading
+    if (photo) {
+      slot.innerHTML =
+        '<img src="' + photo.url + '" alt="' + (record.scientificName || '') + '" ' +
+        'style="width:100%;max-height:160px;object-fit:cover;border-radius:4px;display:block;" ' +
+        'onerror="this.parentElement.innerHTML=\'\'"> ' +
+        '<div style="font-size:10px;color:#9b9890;margin-top:3px;line-height:1.4;">' +
+        licenceBadge(photo.licence) +
+        (photo.photographer ? photo.photographer : '') +
+        '</div>';
+    } else {
+      slot.innerHTML = '';
+    }
+  });
+
   marker._taxonGroup  = getTaxonGroup(record);
   marker._speciesName = record.species || record.scientificName || '';
   return marker;
