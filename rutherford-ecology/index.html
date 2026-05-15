@@ -192,8 +192,8 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
           <option value="">All species</option>
           <option value="1">Animalia</option>
           <option value="212">Aves (birds)</option>
-          <option value="359">Reptilia</option>
-          <option value="194">Amphibia</option>
+          <option value="358">Reptilia</option>
+          <option value="131">Amphibia</option>
           <option value="133">Mammalia</option>
           <option value="fish">Fish</option>
           <option value="6">Plantae</option>
@@ -770,9 +770,23 @@ runBtn.addEventListener('click', async () => {
       { type: 'lessThanOrEquals',    key: 'YEAR', value: String(new Date(dateTo).getFullYear()) }
     ]});
     if (taxonKey === 'fish') {
-      predicates.push({ type: 'in', key: 'CLASS_KEY', values: ['204', '208', '331'] }); // Actinopterygii, Chondrichthyes, Petromyzontida
+      // Fish = all Chordata (taxonKey 44) excluding tetrapod and non-vertebrate chordate classes
+      predicates.push({
+        type: 'and',
+        predicates: [
+          { type: 'equals', key: 'TAXON_KEY', value: '44' }, // Chordata
+          { type: 'not', predicate: { type: 'in', key: 'TAXON_KEY', values: [
+            '212',  // Aves
+            '133',  // Mammalia
+            '358',  // Reptilia
+            '131',  // Amphibia
+            '207',  // Thaliacea (salps)
+            '211',  // Appendicularia (larvaceans)
+          ]}}
+        ]
+      });
     } else if (taxonKey) {
-      predicates.push({ type: 'equals', key: 'CLASS_KEY', value: taxonKey });
+      predicates.push({ type: 'equals', key: 'TAXON_KEY', value: taxonKey });
     }
 
     const body = {
@@ -822,62 +836,14 @@ runBtn.addEventListener('click', async () => {
         status = json.status;
         const totalRecords = json.totalRecords != null ? ' · ' + json.totalRecords.toLocaleString() + ' records found' : '';
         if (status === 'SUCCEEDED') {
-          setStatus('Download ready' + polyLabel + totalRecords + ' — downloading now...', 'info');
-          setProgress(50, 'Downloading from GBIF...');
+          const totalRecords = json.totalRecords != null ? ' · ' + json.totalRecords.toLocaleString() + ' records' : '';
           const downloadUrl = json.downloadLink;
-
-          // Wait for GBIF to finalise the file — can lag behind SUCCEEDED status
-          await new Promise(r => setTimeout(r, 10000));
-
-          // Route through our Netlify proxy to avoid CORS restrictions
-          let zipRes;
-          const proxyUrl = '/.netlify/functions/gbif-proxy?url=' + encodeURIComponent(downloadUrl);
-          setProgress(52, 'Downloading: ' + downloadUrl);
-          zipRes = await fetch(proxyUrl);
-          if (!zipRes.ok) {
-            const errText = await zipRes.text();
-            throw new Error('Download failed: HTTP ' + zipRes.status + ' — ' + errText);
-          }
-          const zipBlob = await zipRes.blob();
-          setProgress(65, 'Unzipping...');
-
-          // Unzip and parse CSV
-          const zip = await JSZip.loadAsync(zipBlob);
-          // GBIF SIMPLE_CSV zips contain occurrence.txt (tab-delimited)
-          const csvFile = Object.values(zip.files).find(f =>
-            f.name.endsWith('.csv') || f.name.endsWith('.tsv') ||
-            f.name.endsWith('.txt') || f.name === 'occurrence.txt'
-          );
-          if (!csvFile) {
-            const fileList = Object.keys(zip.files).join(', ');
-            throw new Error('No data file found in zip. Files present: ' + fileList);
-          }
-          const text = await csvFile.async('string');
-          setProgress(75, 'Parsing records...');
-
-          // Parse tab-separated CSV (GBIF SIMPLE_CSV is tab-delimited)
-          const lines = text.split('\n').filter(l => l.trim());
-          const headers = lines[0].split('\t').map(h => h.trim().replace(/"/g,''));
-          const records = [];
-          for (let i = 1; i < lines.length; i++) {
-            const vals = lines[i].split('\t');
-            const rec = {};
-            headers.forEach((h, idx) => {
-              const v = (vals[idx] || '').replace(/^"|"$/g, '').trim();
-              rec[h] = v === '' ? null : v;
-            });
-            // Normalise field names to match our existing code
-            rec.gbifID             = rec.gbifID || rec.gbifid || rec['gbifID'];
-            rec.scientificName     = rec.scientificName || rec.species;
-            rec.decimalLatitude    = parseFloat(rec.decimalLatitude)  || null;
-            rec.decimalLongitude   = parseFloat(rec.decimalLongitude) || null;
-            rec.taxonKey           = rec.taxonKey || rec.speciesKey;
-            rec.class              = rec.class || rec['class'];
-            rec._polyId            = poly.id;
-            rec._polyLabel         = poly.label;
-            if (rec.decimalLatitude || rec.scientificName) records.push(rec);
-          }
-          allFetched.push(...records);
+          // Open zip download directly in browser — no CORS issues
+          window.open(downloadUrl, '_blank');
+          setProgress(100, 'Download opened in new tab');
+          setStatus('Your GBIF download is ready' + totalRecords + '. The zip file has opened in a new tab — save it and extract the CSV. Use the exports below for map and checklist data.', 'success');
+          // Store download info for display
+          allFetched.push({ _downloadKey: downloadKey, _downloadUrl: downloadUrl, _totalRecords: json.totalRecords || 0, _polyId: poly.id });
         } else if (status === 'FAILED' || status === 'KILLED' || status === 'CANCELLED') {
           setStatus('GBIF download ' + status.toLowerCase() + '. Please try again.', 'error');
           runBtn.disabled = false; return;
@@ -894,22 +860,44 @@ runBtn.addEventListener('click', async () => {
 
   if (allFetched.length === 0) { setStatus('No records found for any polygon with these parameters.', 'warning'); runBtn.disabled = false; return; }
 
-  setStatus('Looking up common names...', 'info');
-  await lookupCommonNames(allFetched);
-  setProgress(100, 'Done');
-
-  allRecords = allFetched;
-  const species = new Set(allFetched.map(r => r.species || r.scientificName).filter(Boolean));
-  document.getElementById('mRecords').textContent = allFetched.length.toLocaleString();
-  document.getElementById('mSpecies').textContent = species.size.toLocaleString();
+  // Show download info — the zip was opened in a new tab
+  const totalRecs = allFetched.reduce((sum, r) => sum + (r._totalRecords || 0), 0);
+  document.getElementById('mRecords').textContent = totalRecs.toLocaleString();
+  document.getElementById('mSpecies').textContent = '-';
+  document.getElementById('mShown').textContent = '-';
   metricsGrid.style.display = 'grid';
-
-  buildFilterChips(allFetched);
-  buildChecklist(allFetched);
-  renderPoints(allFetched);
-  csvData = buildCSV(allFetched);
   outputSection.style.display = 'block';
-  setStatus(allFetched.length.toLocaleString() + ' records loaded — complete dataset from GBIF.', 'success');
+
+  // Now also fetch via search API for map display (quick preview)
+  setStatus('Zip downloaded. Now loading map preview via search API...', 'info');
+  const searchFetched = [];
+  for (let pi = 0; pi < polygons.length; pi++) {
+    const poly = polygons[pi];
+    const dateFrom  = document.getElementById('dateFrom').value;
+    const dateTo    = document.getElementById('dateTo').value || new Date().toISOString().split('T')[0];
+    const taxonKey  = document.getElementById('taxonGroup').value;
+    const coordOnly = document.getElementById('coordOnly').checked;
+    const baseParams = new URLSearchParams({ geometry: poly.wkt, hasCoordinate: coordOnly, limit: 300 });
+    if (dateFrom && dateTo) baseParams.set('eventDate', dateFrom + ',' + dateTo);
+    if (taxonKey && taxonKey !== 'fish') baseParams.set('classKey', taxonKey);
+    try {
+      const res = await fetch('https://api.gbif.org/v1/occurrence/search?' + baseParams);
+      if (res.ok) { const json = await res.json(); searchFetched.push(...(json.results || [])); }
+    } catch(e) {}
+  }
+
+  if (searchFetched.length > 0) {
+    allRecords = searchFetched;
+    const species = new Set(searchFetched.map(r => r.species || r.scientificName).filter(Boolean));
+    document.getElementById('mSpecies').textContent = species.size.toLocaleString() + '+';
+    document.getElementById('mShown').textContent = searchFetched.length.toLocaleString();
+    buildFilterChips(searchFetched);
+    buildChecklist(searchFetched);
+    renderPoints(searchFetched);
+    csvData = buildCSV(searchFetched);
+  }
+
+  setStatus('Complete — ' + totalRecs.toLocaleString() + ' records in your downloaded zip. Map shows a preview of up to 300 records.', 'success');
   runBtn.disabled = false;
 });
 
