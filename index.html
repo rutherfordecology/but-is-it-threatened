@@ -190,14 +190,33 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
         <label>Taxon group</label>
         <select id="taxonGroup">
           <option value="">All species</option>
-          <option value="1">Animalia</option>
-          <option value="212">Aves (birds)</option>
-          <option value="358">Reptilia</option>
-          <option value="131">Amphibia</option>
-          <option value="133">Mammalia</option>
-          <option value="fish">Fish</option>
-          <option value="6">Plantae</option>
-          <option value="4">Fungi</option>
+          <optgroup label="Vertebrates">
+            <option value="212">Aves (birds)</option>
+            <option value="133">Mammalia</option>
+            <option value="358">Reptilia</option>
+            <option value="131">Amphibia</option>
+            <option value="fish">Fish</option>
+          </optgroup>
+          <optgroup label="Invertebrates">
+            <option value="216">Insecta</option>
+            <option value="367">Arachnida</option>
+            <option value="crustacea">Crustacea</option>
+            <option value="52">Mollusca</option>
+            <option value="50">Echinodermata</option>
+            <option value="43">Cnidaria</option>
+            <option value="42">Annelida</option>
+            <option value="1">Other Animalia</option>
+          </optgroup>
+          <optgroup label="Plants">
+            <option value="angiosperms">Angiosperms</option>
+            <option value="194">Gymnosperms</option>
+            <option value="113551061">Ferns &amp; allies</option>
+            <option value="311">Bryophytes (mosses)</option>
+          </optgroup>
+          <optgroup label="Other">
+            <option value="algae">Algae</option>
+            <option value="4">Fungi</option>
+          </optgroup>
         </select>
       </div>
       <div class="check-row">
@@ -311,15 +330,25 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 const COMPLEXITY_THRESHOLD = 500;
 const POLY_COLOURS = ['#2a7a58','#2c5f8a','#8a6020','#8a2c2c','#5a2a7a','#1a5a6a'];
 const TAXON_COLOURS = {
-  'Aves':              { colour: '#2563EB', label: 'Aves (birds)' },
-  'Mammalia':          { colour: '#7C3AED', label: 'Mammalia' },
-  'Reptilia':          { colour: '#D97706', label: 'Reptilia' },
-  'Amphibia':          { colour: '#059669', label: 'Amphibia' },
-  'Insecta':           { colour: '#DC2626', label: 'Insecta' },
-  'Plantae':           { colour: '#16A34A', label: 'Plantae' },
-  'Fungi':             { colour: '#92400E', label: 'Fungi' },
-  'Fish':              { colour: '#0891B2', label: 'Fish' },
-  'Other':             { colour: '#6B7280', label: 'Other' }
+  'Aves':            { colour: '#2563EB', label: 'Aves (birds)' },
+  'Mammalia':        { colour: '#7C3AED', label: 'Mammalia' },
+  'Reptilia':        { colour: '#D97706', label: 'Reptilia' },
+  'Amphibia':        { colour: '#059669', label: 'Amphibia' },
+  'Fish':            { colour: '#0891B2', label: 'Fish' },
+  'Insecta':         { colour: '#DC2626', label: 'Insecta' },
+  'Arachnida':       { colour: '#92400E', label: 'Arachnida' },
+  'Crustacea':       { colour: '#0E7490', label: 'Crustacea' },
+  'Mollusca':        { colour: '#7E22CE', label: 'Mollusca' },
+  'Echinodermata':   { colour: '#BE185D', label: 'Echinodermata' },
+  'Cnidaria':        { colour: '#0369A1', label: 'Cnidaria' },
+  'Annelida':        { colour: '#854D0E', label: 'Annelida' },
+  'Angiosperms':     { colour: '#16A34A', label: 'Angiosperms' },
+  'Gymnosperms':     { colour: '#166534', label: 'Gymnosperms' },
+  'Ferns':           { colour: '#4ADE80', label: 'Ferns & allies' },
+  'Bryophytes':      { colour: '#86EFAC', label: 'Bryophytes' },
+  'Algae':           { colour: '#06B6D4', label: 'Algae' },
+  'Fungi':           { colour: '#D97706', label: 'Fungi' },
+  'Other':           { colour: '#6B7280', label: 'Other' }
 };
 const CSV_FIELDS = ['gbifID','eventDate','year','month','day','scientificName','vernacularName','kingdom','phylum','class','order','family','genus','species','decimalLatitude','decimalLongitude','coordinateUncertaintyInMeters','basisOfRecord','occurrenceID','taxonKey','datasetName','country','stateProvince','locality','recordedBy'];
 
@@ -395,17 +424,52 @@ document.getElementById('clClearSel').addEventListener('click', () => clearSpeci
 function setStatus(msg, type) { statusBar.textContent = msg; statusBar.className = 'status-bar ' + type; statusBar.style.display = 'block'; }
 function setProgress(pct, label) { progressWrap.style.display = 'block'; progressFill.style.width = pct + '%'; progressLabel.textContent = label; }
 
-const FISH_CLASSES = new Set(['Actinopterygii','Chondrichthyes','Elasmobranchii','Holocephali','Petromyzontida','Myxini','Sarcopterygii','Cephalaspidomorphi']);
+const FISH_CLASSES     = new Set(['Actinopterygii','Chondrichthyes','Elasmobranchii','Holocephali','Petromyzontida','Myxini','Sarcopterygii','Cephalaspidomorphi']);
 const TETRAPOD_CLASSES = new Set(['Aves','Mammalia','Reptilia','Amphibia']);
+const CRUST_CLASSES    = new Set(['Malacostraca','Maxillopoda','Branchiopoda','Ostracoda','Cirripedia','Copepoda']);
+const ANGIO_CLASSES    = new Set(['Magnoliopsida','Liliopsida','Equisetopsida']);
+const FERN_CLASSES     = new Set(['Polypodiopsida','Marattiopsida','Psilotopsida','Equisetopsida']);
+const BRYO_CLASSES     = new Set(['Bryopsida','Jungermanniopsida','Marchantiopsida','Anthocerotopsida','Polytrichopsida','Sphagnopsida']);
+const GYMNO_CLASSES    = new Set(['Pinopsida','Cycadopsida','Gnetopsida','Ginkgoopsida']);
+const ALGAE_PHYLA      = new Set(['Ochrophyta','Phaeophyta','Rhodophyta','Chlorophyta','Charophyta','Cyanobacteria','Bacillariophyta']);
 
 function getTaxonGroup(r) {
   const cls = r.class || '';
-  if (cls && TAXON_COLOURS[cls]) return cls;
+  const phylum = r.phylum || '';
+  const kingdom = r.kingdom || '';
+
+  // Vertebrates
+  if (cls === 'Aves') return 'Aves';
+  if (cls === 'Mammalia') return 'Mammalia';
+  if (cls === 'Reptilia') return 'Reptilia';
+  if (cls === 'Amphibia') return 'Amphibia';
   if (FISH_CLASSES.has(cls)) return 'Fish';
-  // Classless Chordata that aren't tetrapods → fish
-  if (r.phylum === 'Chordata' && !cls && !TETRAPOD_CLASSES.has(cls)) return 'Fish';
-  if (r.kingdom === 'Plantae') return 'Plantae';
-  if (r.kingdom === 'Fungi') return 'Fungi';
+  if (phylum === 'Chordata' && !cls && !TETRAPOD_CLASSES.has(cls)) return 'Fish';
+
+  // Arthropod subgroups
+  if (cls === 'Insecta') return 'Insecta';
+  if (cls === 'Arachnida') return 'Arachnida';
+  if (CRUST_CLASSES.has(cls)) return 'Crustacea';
+
+  // Marine/other invertebrates
+  if (phylum === 'Mollusca') return 'Mollusca';
+  if (phylum === 'Echinodermata') return 'Echinodermata';
+  if (phylum === 'Cnidaria') return 'Cnidaria';
+  if (phylum === 'Annelida') return 'Annelida';
+
+  // Plants
+  if (ANGIO_CLASSES.has(cls)) return 'Angiosperms';
+  if (GYMNO_CLASSES.has(cls)) return 'Gymnosperms';
+  if (FERN_CLASSES.has(cls)) return 'Ferns';
+  if (BRYO_CLASSES.has(cls)) return 'Bryophytes';
+
+  // Algae — multiple kingdoms
+  if (kingdom === 'Chromista') return 'Algae';
+  if (ALGAE_PHYLA.has(phylum)) return 'Algae';
+
+  // Fungi
+  if (kingdom === 'Fungi') return 'Fungi';
+
   return 'Other';
 }
 function getTaxonColour(r) { return (TAXON_COLOURS[getTaxonGroup(r)] || TAXON_COLOURS['Other']).colour; }
@@ -776,21 +840,25 @@ runBtn.addEventListener('click', async () => {
       { type: 'lessThanOrEquals',    key: 'YEAR', value: String(new Date(dateTo).getFullYear()) }
     ]});
     if (taxonKey === 'fish') {
-      // Fish = all Chordata (taxonKey 44) excluding tetrapod and non-vertebrate chordate classes
-      predicates.push({
-        type: 'and',
-        predicates: [
-          { type: 'equals', key: 'TAXON_KEY', value: '44' }, // Chordata
-          { type: 'not', predicate: { type: 'in', key: 'TAXON_KEY', values: [
-            '212',  // Aves
-            '133',  // Mammalia
-            '358',  // Reptilia
-            '131',  // Amphibia
-            '207',  // Thaliacea (salps)
-            '211',  // Appendicularia (larvaceans)
-          ]}}
-        ]
-      });
+      predicates.push({ type: 'and', predicates: [
+        { type: 'equals', key: 'TAXON_KEY', value: '44' },
+        { type: 'not', predicate: { type: 'in', key: 'TAXON_KEY', values: ['212','133','358','131','207','211'] }}
+      ]});
+    } else if (taxonKey === 'crustacea') {
+      predicates.push({ type: 'in', key: 'TAXON_KEY', values: ['229','203','284','367'] }); // Malacostraca, Maxillopoda, Branchiopoda, Ostracoda
+    } else if (taxonKey === 'angiosperms') {
+      predicates.push({ type: 'in', key: 'TAXON_KEY', values: ['220','162846864'] }); // Magnoliopsida, Liliopsida
+    } else if (taxonKey === 'algae') {
+      predicates.push({ type: 'or', predicates: [
+        { type: 'equals', key: 'KINGDOM_KEY', value: '4' },  // Chromista
+        { type: 'in', key: 'TAXON_KEY', values: ['3241496','3153'] } // Chlorophyta, Rhodophyta
+      ]});
+    } else if (taxonKey === '1') {
+      // Other Animalia — exclude the named groups
+      predicates.push({ type: 'and', predicates: [
+        { type: 'equals', key: 'KINGDOM_KEY', value: '1' },
+        { type: 'not', predicate: { type: 'in', key: 'TAXON_KEY', values: ['44','216','367','229','203','52','50','43','42'] }}
+      ]});
     } else if (taxonKey) {
       predicates.push({ type: 'equals', key: 'TAXON_KEY', value: taxonKey });
     }
