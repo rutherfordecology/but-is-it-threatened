@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GBIF Occurrence Extractor · Rutherford Ecology</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+:root {
+  --bg: #f3f2ee; --surface: #fff; --surface2: #eeede8;
+  --border: #dddbd3; --border2: #c8c6bc;
+  --text: #1c1b18; --text2: #6b6960; --text3: #9b9890;
+  --green: #2a7a58; --green-light: #e8f4ef; --green-mid: #6dba9a; --green-dark: #1a5940;
+  --blue: #2c5f8a; --blue-light: #e8f0f7; --blue-mid: #7aaed4;
+  --amber: #8a6020; --amber-light: #faf2e0; --amber-mid: #d4a84b;
+  --red: #8a2c2c; --red-light: #faf0f0; --red-mid: #d47a7a;
+  --radius: 6px; --radius-lg: 10px;
+  --font-sans: system-ui, -apple-system, sans-serif;
+}
+body { font-family: var(--font-sans); background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; font-size: 14px; margin: 0; }
+
+header { background: var(--green-dark); color: white; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 52px; flex-shrink: 0; }
+.header-brand { display: flex; align-items: baseline; gap: 10px; }
+.header-brand h1 { font-size: 16px; color: white; }
+.header-brand h1 strong { font-weight: 700; }
+.header-brand h1 em { font-weight: 300; font-style: normal; }
+.header-brand h1 a { color: white; text-decoration: none; }
+.header-brand h1 a:hover { text-decoration: underline; }
+.header-brand span { font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 300; }
+.header-right { font-size: 11px; color: rgba(255,255,255,0.45); font-weight: 300; }
+
+.layout { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 52px); overflow: hidden; }
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; min-height: 0; }
+.sidebar-section { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+.section-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); margin-bottom: 0.7rem; }
+.instruction-box { background: var(--green-light); border: 0.5px solid var(--green-mid); border-radius: var(--radius); padding: 10px 12px; font-size: 12.5px; color: var(--green-dark); line-height: 1.65; margin-bottom: 0.8rem; }
+
+.drop-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 14px 10px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--surface2); }
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--green); background: var(--green-light); }
+.drop-zone input { display: none; }
+.dz-icon { font-size: 20px; margin-bottom: 5px; }
+.dz-text { font-size: 12.5px; color: var(--text2); }
+.dz-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+.poly-list { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 5px; }
+.poly-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--radius); background: var(--green-light); border: 0.5px solid var(--green-mid); font-size: 12px; color: var(--green-dark); }
+.poly-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.poly-item-count { font-size: 11px; color: var(--green); flex-shrink: 0; }
+.poly-remove { cursor: pointer; color: var(--green); font-size: 14px; flex-shrink: 0; line-height: 1; padding: 0 2px; }
+.poly-remove:hover { color: var(--red); }
+.poly-empty { font-size: 12px; color: var(--text3); padding: 6px 0; }
+
+.small-btn { margin-top: 0.5rem; padding: 5px 10px; font-size: 12px; font-family: var(--font-sans); border-radius: var(--radius); cursor: pointer; border: 0.5px solid var(--border); background: var(--surface2); color: var(--text2); transition: all 0.12s; }
+.small-btn:hover { background: var(--red-light); color: var(--red); border-color: var(--red-mid); }
+
+.field { margin-bottom: 0.65rem; }
+.field label { display: block; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 4px; }
+.field input, .field select { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 9px; font-size: 13px; font-family: var(--font-sans); background: var(--surface); color: var(--text); -webkit-appearance: none; appearance: none; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px rgba(42,122,88,0.1); }
+.half { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.check-row { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); margin-bottom: 0.45rem; }
+.check-row input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--green); }
+
+.run-btn { width: 100%; padding: 9px; font-size: 14px; font-family: var(--font-sans); font-weight: 500; background: var(--green-dark); color: white; border: none; border-radius: var(--radius); cursor: pointer; transition: opacity 0.15s; }
+.run-btn:hover:not(:disabled) { opacity: 0.88; }
+.run-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.status-bar { font-size: 12px; padding: 8px 10px; border-radius: var(--radius); margin-top: 0.7rem; line-height: 1.55; display: none; }
+.status-bar.info    { background: var(--blue-light);  color: var(--blue);       border: 0.5px solid var(--blue-mid); }
+.status-bar.success { background: var(--green-light); color: var(--green-dark); border: 0.5px solid var(--green-mid); }
+.status-bar.error   { background: var(--red-light);   color: var(--red);        border: 0.5px solid var(--red-mid); }
+.status-bar.warning { background: var(--amber-light); color: var(--amber);      border: 0.5px solid var(--amber-mid); }
+
+.progress-wrap { margin-top: 0.6rem; display: none; }
+.progress-track { height: 3px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.3s; width: 0%; }
+.progress-label { font-size: 11px; color: var(--text3); margin-top: 4px; }
+
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 0.7rem; }
+.metric { background: var(--surface2); border-radius: var(--radius); padding: 9px 8px; text-align: center; }
+.metric-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); }
+.metric-value { font-size: 19px; font-weight: 500; margin-top: 2px; color: var(--green-dark); }
+
+.tool-row { display: flex; gap: 6px; margin-top: 0.6rem; }
+.tool-btn { flex: 1; padding: 6px; font-size: 12px; font-family: var(--font-sans); border-radius: var(--radius); cursor: pointer; border: 0.5px solid var(--border); background: var(--surface2); color: var(--text2); transition: all 0.12s; text-align: center; }
+.tool-btn.active { background: var(--green-dark); color: white; border-color: var(--green-dark); }
+.tool-btn:hover:not(.active) { background: var(--border); }
+
+.export-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 0.6rem; }
+.dl-btn { width: 100%; padding: 8px; font-size: 13px; font-family: var(--font-sans); font-weight: 500; background: var(--green-light); color: var(--green-dark); border: 1px solid var(--green-mid); border-radius: var(--radius); cursor: pointer; transition: background 0.12s; }
+.dl-btn:hover { background: #c8e8db; }
+.dl-btn.full { grid-column: 1 / -1; font-size: 14px; padding: 9px; }
+
+.filter-section { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: none; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 0.5rem; }
+.chip { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: all 0.15s; user-select: none; }
+.chip.off { opacity: 0.35; text-decoration: line-through; }
+
+.legend { position: absolute; bottom: 28px; right: 10px; z-index: 800; background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 12px; display: none; min-width: 140px; }
+.legend-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 6px; }
+.legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; color: var(--text2); font-size: 11px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+.checklist-panel { position: absolute; top: 0; right: 0; width: 290px; height: 100%; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; z-index: 900; transform: translateX(100%); transition: transform 0.25s ease; box-shadow: -4px 0 16px rgba(0,0,0,0.08); }
+.checklist-panel.open { transform: translateX(0); }
+.cl-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface2); }
+.cl-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); }
+.cl-close { cursor: pointer; font-size: 18px; color: var(--text3); line-height: 1; padding: 2px 5px; border-radius: 4px; border: none; background: none; }
+.cl-close:hover { color: var(--red); background: var(--red-light); }
+.cl-selected-info { padding: 6px 10px; font-size: 11px; background: var(--green-light); color: var(--green-dark); border-bottom: 1px solid var(--green-mid); display: none; }
+.cl-clear-sel { cursor: pointer; text-decoration: underline; margin-left: 6px; }
+.cl-search { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.cl-search input { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 9px; font-size: 12px; font-family: var(--font-sans); background: var(--surface2); color: var(--text); }
+.cl-search input:focus { outline: none; border-color: var(--green); }
+.cl-scroll { flex: 1; overflow-y: auto; }
+.cl-group-header { padding: 5px 10px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; background: var(--surface2); color: var(--text2); position: sticky; top: 0; z-index: 1; border-bottom: 0.5px solid var(--border); }
+.cl-row { display: flex; flex-direction: column; padding: 7px 10px; font-size: 12px; border-bottom: 0.5px solid var(--border); cursor: pointer; transition: background 0.1s; }
+.cl-row:hover { background: var(--green-light); }
+.cl-row.selected { background: var(--green-light); border-left: 3px solid var(--green); padding-left: 7px; }
+.cl-row.hidden { display: none; }
+.cl-row-top { display: flex; justify-content: space-between; align-items: baseline; }
+.cl-name { font-style: italic; color: var(--text); flex: 1; }
+.cl-count { color: var(--text3); font-size: 11px; flex-shrink: 0; margin-left: 8px; }
+.cl-common { font-size: 11px; color: var(--text2); margin-top: 1px; }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9999; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: var(--radius-lg); padding: 1.5rem; max-width: 380px; width: 90%; }
+.modal h2 { font-size: 16px; font-weight: 600; margin-bottom: 0.6rem; }
+.modal p { font-size: 13px; color: var(--text2); line-height: 1.65; margin-bottom: 1rem; }
+.modal-btns { display: flex; gap: 8px; }
+.modal-btn { flex: 1; padding: 8px; font-size: 13px; font-family: var(--font-sans); border-radius: var(--radius); cursor: pointer; font-weight: 500; border: 1px solid var(--border); background: var(--surface2); color: var(--text); transition: background 0.12s; }
+.modal-btn:hover { background: var(--border); }
+.modal-btn.primary { background: var(--green-dark); color: white; border-color: var(--green-dark); }
+.modal-btn.primary:hover { opacity: 0.88; }
+
+.sidebar-footer { padding: 1rem 1.25rem; margin-top: auto; border-top: 1px solid var(--border); }
+.note { font-size: 11px; color: var(--text3); line-height: 1.65; }
+.note a { color: var(--green); text-decoration: none; }
+.note a:hover { text-decoration: underline; }
+
+#map-wrap { position: relative; width: 100%; height: calc(100vh - 52px); overflow: hidden; }
+#map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-brand">
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">· GBIF Occurrence Extractor</span>
+  </div>
+  <div class="header-right">
+    Powered by GBIF &amp; OpenStreetMap &nbsp;·&nbsp;
+    <a href="mailto:Rutherfordecology@gmail.com" style="color:rgba(255,255,255,0.7);font-weight:400;">Feedback</a> &nbsp;·&nbsp;
+    <a href="https://buymeacoffee.com/rutherfordecology" target="_blank" style="color:#d4a84b;font-weight:500;">&#9749; Buy me a coffee</a>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">1 · Define area</div>
+      <div class="instruction-box">Draw a polygon directly on the map using the polygon tool (top-left of map), or upload a <strong>KML or KMZ</strong> file. Multiple areas can be combined.</div>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".kml,.kmz" multiple>
+        <div class="dz-icon">&#128506;</div>
+        <div class="dz-text">Drop KML/KMZ files here, or click to browse</div>
+        <div class="dz-sub">Polygon geometry &middot; multiple files supported</div>
+      </div>
+      <div class="poly-list" id="polyList">
+        <div class="poly-empty" id="polyEmpty">No polygons loaded</div>
+      </div>
+      <button class="small-btn" id="clearAllBtn" style="display:none">&#x2715; Clear all polygons</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">2 · Parameters</div>
+      <div class="half">
+        <div class="field"><label>Date from</label><input type="date" id="dateFrom" value="2015-01-01"></div>
+        <div class="field"><label>Date to</label><input type="date" id="dateTo"></div>
+      </div>
+      <div class="field">
+        <label>Taxon group</label>
+        <select id="taxonGroup">
+          <option value="">All species</option>
+          <option value="1">Animalia</option>
+          <option value="212">Aves (birds)</option>
+          <option value="358">Reptilia</option>
+          <option value="131">Amphibia</option>
+          <option value="133">Mammalia</option>
+          <option value="fish">Fish</option>
+          <option value="6">Plantae</option>
+          <option value="4">Fungi</option>
+        </select>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="coordOnly" checked>
+        <label for="coordOnly">Coordinates required</label>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">3 · Fetch data</div>
+      <button class="run-btn" id="runBtn" disabled>Fetch occurrences from GBIF</button>
+      <div class="status-bar" id="statusBar"></div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel"></div>
+      </div>
+      <div class="metrics" id="metricsGrid" style="display:none">
+        <div class="metric"><div class="metric-label">Records</div><div class="metric-value" id="mRecords">-</div></div>
+        <div class="metric"><div class="metric-label">Species</div><div class="metric-value" id="mSpecies">-</div></div>
+        <div class="metric"><div class="metric-label">Shown</div><div class="metric-value" id="mShown">-</div></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="outputSection" style="display:none">
+      <div class="section-label">4 · Output</div>
+      <div class="tool-row">
+        <button class="tool-btn active" id="btnPoints" onclick="setViewMode('points')">Points</button>
+        <button class="tool-btn" id="btnHeat" onclick="setViewMode('heat')">Heatmap</button>
+      </div>
+      <button class="tool-btn" id="btnChecklist" onclick="toggleChecklist()" style="width:100%;margin-top:6px;">Show species checklist</button>
+      <div class="export-row" style="margin-top:0.75rem;">
+        <button class="dl-btn" id="dlCsvBtn">&#8595; CSV (filtered)</button>
+        <button class="dl-btn" id="dlGeoBtn">&#8595; GeoJSON</button>
+        <button class="dl-btn full" id="dlChecklistBtn">&#8595; Species checklist CSV</button>
+      </div>
+    </div>
+
+    <div class="filter-section" id="filterSection">
+      <div class="section-label">Filter by taxon group</div>
+      <div class="filter-chips" id="filterChips"></div>
+    </div>
+
+    <div class="sidebar-footer">
+      <p class="note">
+        Queries the <a href="https://techdocs.gbif.org/en/data-use/api-downloads" target="_blank">GBIF occurrence download API</a> — uses a dedicated GBIF account to retrieve complete datasets. Results are fully comprehensive with no record limits. For more information visit the <a href="https://www.gbif.org" target="_blank">GBIF portal</a>.<br><br>
+        © Rutherford Ecology
+      </p>
+    </div>
+  </div>
+
+  <div id="map-wrap">
+    <div id="map"></div>
+
+    <div class="checklist-panel" id="checklistPanel">
+      <div class="cl-header">
+        <span class="cl-title">Species checklist</span>
+        <button class="cl-close" id="clCloseBtn">&#x2715;</button>
+      </div>
+      <div class="cl-selected-info" id="clSelectedInfo">
+        Highlighting: <span id="clSelectedName"></span>
+        <span class="cl-clear-sel" id="clClearSel">clear</span>
+      </div>
+      <div class="cl-search">
+        <input type="text" id="clSearchInput" placeholder="Search species...">
+      </div>
+      <div class="cl-scroll" id="clScroll"></div>
+    </div>
+
+    <div class="legend" id="legend">
+      <div class="legend-title">Taxon group</div>
+      <div id="legendItems"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Complexity modal -->
+<div class="modal-overlay" id="complexModal">
+  <div class="modal">
+    <h2>Complex polygon detected</h2>
+    <p>This polygon has <strong id="vertexCount"></strong> vertices. GBIF's API can struggle with highly complex geometries.<br><br>Consider simplifying it in QGIS first, or proceed and see if the query works.</p>
+    <div class="modal-btns">
+      <button class="modal-btn" id="modalCancel">Cancel</button>
+      <button class="modal-btn primary" id="modalProceed">Proceed anyway</button>
+    </div>
+  </div>
+</div>
+
+<!-- Disclaimer modal -->
+<div class="modal-overlay open" id="disclaimerModal">
+  <div class="modal" style="max-width:480px">
+    <h2>Data disclaimer</h2>
+    <p style="margin-bottom:0.6rem">This tool provides access to biodiversity occurrence data sourced from the Global Biodiversity Information Facility (GBIF). Users should be aware of the following limitations:</p>
+    <ul style="font-size:13px;color:#6b6960;line-height:1.7;padding-left:1.2rem;margin-bottom:1rem">
+      <li>Data reflects what has been recorded and submitted to GBIF, and is not a comprehensive survey of any area.</li>
+      <li>Location data for some species may be absent or inaccurate where records have been obscured prior to submission to GBIF. This obscuring is biased towards rare and threatened species, meaning the tool may underrepresent precisely those species of greatest conservation interest.</li>
+      <li>Individual records may contain errors in identification, location, or date.</li>
+      <li>This tool is intended as a starting point for investigation, not as authoritative data for regulatory or legal purposes.</li>
+    </ul>
+    <div class="modal-btns">
+      <button class="modal-btn primary" id="disclaimerAccept">I understand — continue</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+const COMPLEXITY_THRESHOLD = 500;
+const POLY_COLOURS = ['#2a7a58','#2c5f8a','#8a6020','#8a2c2c','#5a2a7a','#1a5a6a'];
+const TAXON_COLOURS = {
+  'Aves':           { colour: '#2563EB', label: 'Aves (birds)' },
+  'Mammalia':       { colour: '#7C3AED', label: 'Mammalia' },
+  'Reptilia':       { colour: '#D97706', label: 'Reptilia' },
+  'Amphibia':       { colour: '#059669', label: 'Amphibia' },
+  'Insecta':        { colour: '#DC2626', label: 'Insecta' },
+  'Plantae':        { colour: '#16A34A', label: 'Plantae' },
+  'Fungi':          { colour: '#92400E', label: 'Fungi' },
+  'Actinopterygii': { colour: '#0891B2', label: 'Fish' },
+  'Other':          { colour: '#6B7280', label: 'Other' }
+};
+const CSV_FIELDS = ['gbifID','eventDate','year','month','day','scientificName','vernacularName','kingdom','phylum','class','order','family','genus','species','decimalLatitude','decimalLongitude','coordinateUncertaintyInMeters','basisOfRecord','occurrenceID','taxonKey','datasetName','country','stateProvince','locality','recordedBy'];
+
+// Map
+const map = L.map('map').setView([-41.5, 172.5], 5);
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 });
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: '&copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics', maxZoom: 19 });
+osmLayer.addTo(map);
+L.control.layers({ 'Map': osmLayer, 'Satellite': satelliteLayer }, {}, { position: 'topright' }).addTo(map);
+window.addEventListener('load', () => {
+  setTimeout(() => map.invalidateSize(), 100);
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => map.setView([pos.coords.latitude, pos.coords.longitude], 11),
+      () => {}
+    );
+  }
+});
+
+const polyLayer = L.featureGroup().addTo(map);
+let clusterLayer = null, heatLayer = null;
+
+const drawControl = new L.Control.Draw({
+  edit: { featureGroup: polyLayer, edit: false, remove: false },
+  draw: {
+    polygon: { shapeOptions: { color: '#2a7a58', fillColor: '#2a7a58', fillOpacity: 0.1, weight: 2 }, showArea: false },
+    polyline: false, rectangle: false, circle: false, circlemarker: false, marker: false
+  }
+}).addTo(map);
+
+map.on(L.Draw.Event.CREATED, e => {
+  const raw = e.layer.getLatLngs();
+  const latlngs = Array.isArray(raw[0]) ? raw[0] : (raw[0].lat !== undefined ? raw : raw[0]);
+  addPolygon(latlngs, 'Drawn polygon ' + (nextPolyId + 1));
+});
+
+// State
+let polygons = [], allRecords = [], activeFilters = new Set();
+let viewMode = 'points', selectedSpecies = null, nextPolyId = 0, csvData = null, pendingLoad = null;
+let allMarkers = [];
+let commonNameCache = {};
+
+// UI refs
+const runBtn         = document.getElementById('runBtn');
+const statusBar      = document.getElementById('statusBar');
+const progressWrap   = document.getElementById('progressWrap');
+const progressFill   = document.getElementById('progressFill');
+const progressLabel  = document.getElementById('progressLabel');
+const metricsGrid    = document.getElementById('metricsGrid');
+const filterSection  = document.getElementById('filterSection');
+const filterChips    = document.getElementById('filterChips');
+const legend         = document.getElementById('legend');
+const legendItems    = document.getElementById('legendItems');
+const complexModal   = document.getElementById('complexModal');
+const polyList       = document.getElementById('polyList');
+const polyEmpty      = document.getElementById('polyEmpty');
+const clearAllBtn    = document.getElementById('clearAllBtn');
+const dropZone       = document.getElementById('dropZone');
+const fileInput      = document.getElementById('fileInput');
+const outputSection  = document.getElementById('outputSection');
+const checklistPanel = document.getElementById('checklistPanel');
+const clSelectedInfo = document.getElementById('clSelectedInfo');
+const clScroll       = document.getElementById('clScroll');
+
+document.getElementById('dateTo').value = new Date().toISOString().split('T')[0];
+document.getElementById('clSearchInput').addEventListener('input', filterChecklistSearch);
+document.getElementById('clCloseBtn').addEventListener('click', () => toggleChecklist());
+document.getElementById('clClearSel').addEventListener('click', () => clearSpeciesSelection());
+
+// Helpers
+function setStatus(msg, type) { statusBar.textContent = msg; statusBar.className = 'status-bar ' + type; statusBar.style.display = 'block'; }
+function setProgress(pct, label) { progressWrap.style.display = 'block'; progressFill.style.width = pct + '%'; progressLabel.textContent = label; }
+
+function getTaxonGroup(r) {
+  if (TAXON_COLOURS[r.class]) return r.class;
+  if (r.kingdom === 'Plantae') return 'Plantae';
+  if (r.kingdom === 'Fungi') return 'Fungi';
+  return 'Other';
+}
+function getTaxonColour(r) { return (TAXON_COLOURS[getTaxonGroup(r)] || TAXON_COLOURS['Other']).colour; }
+
+function passesFilters(r) {
+  return activeFilters.has(getTaxonGroup(r));
+}
+
+function clearResults() {
+  allRecords = []; activeFilters.clear(); csvData = null; selectedSpecies = null; allMarkers = []; commonNameCache = {};
+  metricsGrid.style.display = 'none'; filterSection.style.display = 'none';
+  legend.style.display = 'none'; outputSection.style.display = 'none';
+  statusBar.style.display = 'none'; progressWrap.style.display = 'none';
+  checklistPanel.classList.remove('open');
+  clScroll.innerHTML = ''; clSelectedInfo.style.display = 'none';
+  if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
+  if (heatLayer)    { map.removeLayer(heatLayer);    heatLayer = null; }
+}
+
+// Polygons
+function latlngsToWKT(latlngs) {
+  let coords = latlngs.map(ll => {
+    const lat = ll.lat !== undefined ? ll.lat : ll[0];
+    const lng = ll.lng !== undefined ? ll.lng : ll[1];
+    return [parseFloat(lng.toFixed(6)), parseFloat(lat.toFixed(6))];
+  });
+  const first = coords[0], last = coords[coords.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) coords.push(coords[0].slice());
+  let area = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    area += (coords[i+1][0] - coords[i][0]) * (coords[i+1][1] + coords[i][1]);
+  }
+  if (area > 0) coords.reverse();
+  return 'POLYGON((' + coords.map(c => c[0] + ' ' + c[1]).join(',') + '))';
+}
+
+function addPolygon(latlngs, label) {
+  const id = nextPolyId++;
+  const colour = POLY_COLOURS[id % POLY_COLOURS.length];
+  const layer = L.polygon(latlngs, { color: colour, fillColor: colour, fillOpacity: 0.1, weight: 2 });
+  polyLayer.addLayer(layer);
+  polygons.push({ id, label, latlngs, wkt: latlngsToWKT(latlngs), layer });
+  renderPolyList();
+  map.fitBounds(polyLayer.getBounds(), { padding: [50, 50] });
+  runBtn.disabled = false; clearAllBtn.style.display = 'block'; clearResults();
+}
+
+function removePolygon(id) {
+  const idx = polygons.findIndex(p => p.id === id);
+  if (idx === -1) return;
+  polyLayer.removeLayer(polygons[idx].layer); polygons.splice(idx, 1); renderPolyList();
+  if (polygons.length === 0) { runBtn.disabled = true; clearAllBtn.style.display = 'none'; }
+  clearResults();
+}
+
+function renderPolyList() {
+  polyEmpty.style.display = polygons.length === 0 ? 'block' : 'none';
+  polyList.querySelectorAll('.poly-item').forEach(el => el.remove());
+  polygons.forEach(p => {
+    const el = document.createElement('div'); el.className = 'poly-item';
+    el.innerHTML = '<span class="poly-item-name" title="' + p.label + '">&#10003; ' + p.label + '</span><span class="poly-item-count">' + p.latlngs.length + ' pts</span><span class="poly-remove" data-id="' + p.id + '">&#x2715;</span>';
+    el.querySelector('.poly-remove').addEventListener('click', () => removePolygon(p.id));
+    polyList.appendChild(el);
+  });
+}
+
+clearAllBtn.addEventListener('click', () => {
+  polygons.forEach(p => polyLayer.removeLayer(p.layer)); polygons = []; nextPolyId = 0;
+  renderPolyList(); runBtn.disabled = true; clearAllBtn.style.display = 'none'; clearResults();
+});
+
+// File handling
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); Array.from(e.dataTransfer.files).forEach(handleFile); });
+fileInput.addEventListener('change', () => { Array.from(fileInput.files).forEach(handleFile); fileInput.value = ''; });
+
+function handleFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.kmz')) handleKMZ(file);
+  else if (name.endsWith('.kml')) { const r = new FileReader(); r.onload = e => processKMLText(e.target.result, file.name); r.readAsText(file); }
+  else setStatus('Please upload .kml or .kmz files only.', 'error');
+}
+
+async function handleKMZ(file) {
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const kmlFile = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
+    if (!kmlFile) { setStatus('No KML found inside ' + file.name, 'error'); return; }
+    processKMLText(await kmlFile.async('string'), file.name);
+  } catch(e) { setStatus('Could not read KMZ: ' + e.message, 'error'); }
+}
+
+function processKMLText(text, name) {
+  try {
+    const latlngs = parseKML(text);
+    if (latlngs.length > COMPLEXITY_THRESHOLD) {
+      pendingLoad = { latlngs, label: name };
+      document.getElementById('vertexCount').textContent = latlngs.length.toLocaleString();
+      complexModal.classList.add('open');
+    } else addPolygon(latlngs, name);
+  } catch(e) { setStatus('Could not read ' + name + ': ' + e.message, 'error'); }
+}
+
+function parseKML(text) {
+  const doc = new DOMParser().parseFromString(text, 'text/xml');
+  const coordEl = doc.querySelector('coordinates');
+  if (!coordEl) throw new Error('No coordinates element found.');
+  const pairs = coordEl.textContent.trim().split(/\s+/).map(p => {
+    const parts = p.split(',');
+    if (parts.length < 2) return null;
+    const lng = parseFloat(parts[0]), lat = parseFloat(parts[1]);
+    return (isNaN(lat) || isNaN(lng)) ? null : [lat, lng];
+  }).filter(Boolean);
+  if (pairs.length < 3) throw new Error('Fewer than 3 coordinate pairs found.');
+  return pairs;
+}
+
+// Modals
+document.getElementById('disclaimerAccept').addEventListener('click', () => {
+  document.getElementById('disclaimerModal').classList.remove('open');
+});
+document.getElementById('modalCancel').addEventListener('click', () => { complexModal.classList.remove('open'); pendingLoad = null; });
+document.getElementById('modalProceed').addEventListener('click', () => {
+  complexModal.classList.remove('open');
+  if (pendingLoad) { addPolygon(pendingLoad.latlngs, pendingLoad.label); pendingLoad = null; }
+});
+
+// Common name lookup
+async function lookupCommonNames(records) {
+  const taxonKeys = [...new Set(records.map(r => r.taxonKey).filter(Boolean))];
+  const total = taxonKeys.length;
+  let done = 0;
+  const BATCH = 10;
+  for (let i = 0; i < taxonKeys.length; i += BATCH) {
+    const batch = taxonKeys.slice(i, i + BATCH);
+    await Promise.all(batch.map(async key => {
+      if (commonNameCache[key] !== undefined) return;
+      try {
+        const res = await fetch('https://api.gbif.org/v1/species/' + key + '/vernacularNames?limit=20');
+        if (!res.ok) { commonNameCache[key] = ''; return; }
+        const json = await res.json();
+        const results = json.results || [];
+        const enName = results.find(v => v.language === 'eng' || v.language === 'en');
+        const anyName = results[0];
+        commonNameCache[key] = enName ? enName.vernacularName : (anyName ? anyName.vernacularName : '');
+      } catch(e) { commonNameCache[key] = ''; }
+      done++;
+    }));
+    setProgress(50 + Math.round((done / total) * 45), 'Loading common names... ' + done + ' / ' + total + ' species');
+  }
+  records.forEach(r => { if (r.taxonKey && commonNameCache[r.taxonKey]) r.vernacularName = r.vernacularName || commonNameCache[r.taxonKey]; });
+}
+
+// Map rendering
+function makeMarker(record) {
+  const lat = record.decimalLatitude, lng = record.decimalLongitude;
+  if (lat == null || lng == null) return null;
+  const fillColour = getTaxonColour(record);
+  const marker = L.circleMarker([lat, lng], { radius: 6, fillColor: fillColour, color: '#fff', weight: 1, fillOpacity: 0.85 });
+  const commonName = record.vernacularName ? '<br><span style="color:#6b6960;font-size:11px;">' + record.vernacularName + '</span>' : '';
+  const date   = record.eventDate   ? '<br><b>Date:</b> '   + record.eventDate   : '';
+  const source = record.datasetName ? '<br><b>Source:</b> ' + record.datasetName : '';
+  const gbifId = record.gbifID;
+  const link   = gbifId ? '<br><a href="https://www.gbif.org/occurrence/' + gbifId + '" target="_blank" rel="noopener" style="color:#2a7a58;">View on GBIF &#8599;</a>' : '';
+  marker.bindPopup(
+    '<b>' + (record.scientificName || 'Unknown') + '</b>' + commonName +
+    (record.class ? '<br><i style="color:#9b9890;font-size:11px;">' + record.class + '</i>' : '') +
+    date + source + link,
+    { maxWidth: 260 }
+  );
+  marker._taxonGroup  = getTaxonGroup(record);
+  marker._speciesName = record.species || record.scientificName || '';
+  return marker;
+}
+
+function renderPoints(records) {
+  allMarkers = [];
+  if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
+  if (heatLayer)    { map.removeLayer(heatLayer); }
+  clusterLayer = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 14 });
+  const filtered = records.filter(passesFilters);
+  let shown = 0;
+  filtered.forEach(r => {
+    const m = makeMarker(r);
+    if (m) { clusterLayer.addLayer(m); allMarkers.push({ marker: m, record: r }); shown++; }
+  });
+  map.addLayer(clusterLayer);
+  document.getElementById('mShown').textContent = shown.toLocaleString();
+  csvData = buildCSV(filtered);
+  if (selectedSpecies) applySpeciesHighlight(selectedSpecies);
+}
+
+function renderHeatmap(records) {
+  if (clusterLayer) { map.removeLayer(clusterLayer); }
+  if (heatLayer)    { map.removeLayer(heatLayer); heatLayer = null; }
+  const filtered = records.filter(r => passesFilters(r) && r.decimalLatitude != null);
+  heatLayer = L.heatLayer(filtered.map(r => [r.decimalLatitude, r.decimalLongitude, 0.5]), { radius: 20, blur: 15, maxZoom: 17 });
+  map.addLayer(heatLayer);
+  document.getElementById('mShown').textContent = filtered.length.toLocaleString();
+  csvData = buildCSV(filtered);
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  document.getElementById('btnPoints').classList.toggle('active', mode === 'points');
+  document.getElementById('btnHeat').classList.toggle('active', mode === 'heat');
+  if (allRecords.length === 0) return;
+  if (mode === 'points') renderPoints(allRecords);
+  else renderHeatmap(allRecords);
+}
+
+// Species highlighting
+function applySpeciesHighlight(name) {
+  allMarkers.forEach(({ marker }) => {
+    const isMatch = marker._speciesName === name;
+    marker.setStyle({ fillOpacity: isMatch ? 1 : 0.1, opacity: isMatch ? 1 : 0.15, radius: isMatch ? 9 : 4 });
+    if (isMatch) marker.bringToFront();
+  });
+}
+function clearSpeciesHighlight() {
+  allMarkers.forEach(({ marker }) => marker.setStyle({ fillOpacity: 0.85, opacity: 1, radius: 6 }));
+}
+function selectSpecies(name) {
+  selectedSpecies = name;
+  document.getElementById('clSelectedName').textContent = name;
+  clSelectedInfo.style.display = 'block';
+  document.querySelectorAll('.cl-row').forEach(row => row.classList.toggle('selected', row.dataset.species === name));
+  if (viewMode === 'points') applySpeciesHighlight(name);
+}
+function clearSpeciesSelection() {
+  selectedSpecies = null;
+  clSelectedInfo.style.display = 'none';
+  document.querySelectorAll('.cl-row').forEach(row => row.classList.remove('selected'));
+  clearSpeciesHighlight();
+}
+
+// Checklist
+function toggleChecklist() {
+  const isOpen = checklistPanel.classList.toggle('open');
+  document.getElementById('btnChecklist').textContent = isOpen ? 'Hide species checklist' : 'Show species checklist';
+  document.getElementById('btnChecklist').classList.toggle('active', isOpen);
+}
+
+function filterChecklistSearch() {
+  const q = document.getElementById('clSearchInput').value.toLowerCase();
+  document.querySelectorAll('.cl-row').forEach(row => {
+    const text = (row.dataset.species + ' ' + (row.dataset.common || '')).toLowerCase();
+    row.classList.toggle('hidden', q.length > 0 && !text.includes(q));
+  });
+  document.querySelectorAll('.cl-group-header').forEach(header => {
+    let hasVisible = false, el = header.nextElementSibling;
+    while (el && !el.classList.contains('cl-group-header')) {
+      if (!el.classList.contains('hidden')) hasVisible = true;
+      el = el.nextElementSibling;
+    }
+    header.style.display = hasVisible ? '' : 'none';
+  });
+}
+
+function filterChecklistByTaxon() {
+  document.querySelectorAll('.cl-group-header').forEach(header => {
+    const groupMatch = Object.entries(TAXON_COLOURS).find(entry => entry[1].label === header.textContent);
+    const groupKey   = groupMatch ? groupMatch[0] : 'Other';
+    const visible    = activeFilters.has(groupKey);
+    header.style.display = visible ? '' : 'none';
+    let el = header.nextElementSibling;
+    while (el && !el.classList.contains('cl-group-header')) {
+      el.style.display = visible ? '' : 'none';
+      el = el.nextElementSibling;
+    }
+  });
+  if (selectedSpecies) {
+    const selRow = clScroll.querySelector('.cl-row[data-species="' + selectedSpecies.replace(/"/g, '\\"') + '"]');
+    if (selRow && selRow.style.display === 'none') clearSpeciesSelection();
+  }
+}
+
+function buildChecklist(records) {
+  const byGroup = {};
+  records.forEach(r => {
+    const g    = getTaxonGroup(r);
+    const name = r.species || r.scientificName || 'Unknown';
+    const key  = r.taxonKey || name;
+    if (!byGroup[g]) byGroup[g] = {};
+    if (!byGroup[g][name]) byGroup[g][name] = { count: 0, taxonKey: key, common: '' };
+    byGroup[g][name].count++;
+    if (!byGroup[g][name].common && r.vernacularName) byGroup[g][name].common = r.vernacularName;
+    if (!byGroup[g][name].common && r.taxonKey && commonNameCache[r.taxonKey]) byGroup[g][name].common = commonNameCache[r.taxonKey];
+  });
+  clScroll.innerHTML = '';
+  Object.keys(byGroup).sort().forEach(g => {
+    const label = (TAXON_COLOURS[g] || { label: g }).label;
+    const gh = document.createElement('div'); gh.className = 'cl-group-header'; gh.textContent = label;
+    clScroll.appendChild(gh);
+    Object.entries(byGroup[g]).sort((a,b) => a[0].localeCompare(b[0])).forEach(([name, info]) => {
+      const row = document.createElement('div'); row.className = 'cl-row';
+      row.dataset.species = name;
+      row.dataset.common  = info.common;
+      row.innerHTML =
+        '<div class="cl-row-top"><span class="cl-name">' + name + '</span><span class="cl-count">' + info.count + '</span></div>' +
+        (info.common ? '<div class="cl-common">' + info.common + '</div>' : '');
+      row.addEventListener('click', () => {
+        if (selectedSpecies === name) clearSpeciesSelection();
+        else selectSpecies(name);
+      });
+      clScroll.appendChild(row);
+    });
+  });
+}
+
+// Filter chips
+function buildFilterChips(records) {
+  const groups = {};
+  records.forEach(r => { const g = getTaxonGroup(r); groups[g] = (groups[g] || 0) + 1; });
+  filterChips.innerHTML = ''; legendItems.innerHTML = '';
+  Object.keys(groups).sort().forEach(g => {
+    const colour = (TAXON_COLOURS[g] || TAXON_COLOURS['Other']).colour;
+    const label  = (TAXON_COLOURS[g] || { label: g }).label;
+    const chip   = document.createElement('div'); chip.className = 'chip'; chip.dataset.group = g;
+    chip.textContent = label + ' (' + groups[g] + ')';
+    chip.style.cssText = 'background:' + colour + '33;border-color:' + colour + ';color:' + colour;
+    activeFilters.add(g); // start all on
+    chip.addEventListener('click', () => {
+      if (activeFilters.has(g)) { activeFilters.delete(g); chip.classList.add('off'); }
+      else { activeFilters.add(g); chip.classList.remove('off'); }
+      if (viewMode === 'points') renderPoints(allRecords);
+      else renderHeatmap(allRecords);
+      filterChecklistByTaxon();
+    });
+    filterChips.appendChild(chip);
+    const item = document.createElement('div'); item.className = 'legend-item';
+    item.innerHTML = '<div class="legend-dot" style="background:' + colour + '"></div>' + label;
+    legendItems.appendChild(item);
+  });
+  filterSection.style.display = 'block'; legend.style.display = 'block';
+}
+
+// GBIF credentials
+const GBIF_USER  = 'rutherfordecology';
+const GBIF_PASS  = 'GBIF2026';
+const GBIF_EMAIL = 'rutherfordecology@gmail.com';
+
+// GBIF download API fetch
+runBtn.addEventListener('click', async () => {
+  if (polygons.length === 0) return;
+  runBtn.disabled = true; clearResults();
+
+  const dateFrom  = document.getElementById('dateFrom').value;
+  const dateTo    = document.getElementById('dateTo').value || new Date().toISOString().split('T')[0];
+  const taxonKey  = document.getElementById('taxonGroup').value;
+  const coordOnly = document.getElementById('coordOnly').checked;
+  const allFetched = [];
+
+  for (let pi = 0; pi < polygons.length; pi++) {
+    const poly = polygons[pi];
+    const polyLabel = polygons.length > 1 ? ' (polygon ' + (pi+1) + '/' + polygons.length + ')' : '';
+    setStatus('Submitting download request to GBIF' + polyLabel + '...', 'info');
+    setProgress(5, 'Submitting request...');
+
+    // Build predicate
+    const predicates = [
+      { type: 'within', geometry: poly.wkt }
+    ];
+    if (coordOnly) predicates.push({ type: 'equals', key: 'HAS_COORDINATE', value: 'true' });
+    if (dateFrom && dateTo) predicates.push({ type: 'and', predicates: [
+      { type: 'greaterThanOrEquals', key: 'YEAR', value: String(new Date(dateFrom).getFullYear()) },
+      { type: 'lessThanOrEquals',    key: 'YEAR', value: String(new Date(dateTo).getFullYear()) }
+    ]});
+    if (taxonKey === 'fish') {
+      // Fish = all Chordata (taxonKey 44) excluding tetrapod and non-vertebrate chordate classes
+      predicates.push({
+        type: 'and',
+        predicates: [
+          { type: 'equals', key: 'TAXON_KEY', value: '44' }, // Chordata
+          { type: 'not', predicate: { type: 'in', key: 'TAXON_KEY', values: [
+            '212',  // Aves
+            '133',  // Mammalia
+            '358',  // Reptilia
+            '131',  // Amphibia
+            '207',  // Thaliacea (salps)
+            '211',  // Appendicularia (larvaceans)
+          ]}}
+        ]
+      });
+    } else if (taxonKey) {
+      predicates.push({ type: 'equals', key: 'TAXON_KEY', value: taxonKey });
+    }
+
+    const body = {
+      creator: GBIF_USER,
+      notificationAddresses: [GBIF_EMAIL],
+      sendNotification: false,
+      format: 'SIMPLE_CSV',
+      predicate: predicates.length === 1 ? predicates[0] : { type: 'and', predicates }
+    };
+
+    let downloadKey;
+    try {
+      const res = await fetch('https://api.gbif.org/v1/occurrence/download/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic ' + btoa(GBIF_USER + ':' + GBIF_PASS)
+        },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 400) { setStatus('GBIF rejected the polygon — may be too complex. Try simplifying in QGIS.', 'error'); runBtn.disabled = false; return; }
+        if (res.status === 401) { setStatus('GBIF authentication failed. Check credentials.', 'error'); runBtn.disabled = false; return; }
+        throw new Error('HTTP ' + res.status + ': ' + text);
+      }
+      downloadKey = await res.text();
+      downloadKey = downloadKey.replace(/"/g, '').trim();
+    } catch(e) {
+      if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('CORS')) {
+        setStatus('Browser security is blocking the authenticated request. Please use the tool from a hosted URL (Netlify), not a local file.', 'error');
+      } else {
+        setStatus('Could not submit download request: ' + e.message, 'error');
+      }
+      runBtn.disabled = false; return;
+    }
+
+    // Poll until ready
+    setStatus('Download submitted — GBIF is preparing your data. This usually takes 30 seconds to 2 minutes, but may be longer for large areas. Everything is working fine.', 'info');
+    let elapsed = 0, status = 'PREPARING';
+    while (status !== 'SUCCEEDED' && status !== 'FAILED' && status !== 'KILLED' && status !== 'CANCELLED') {
+      await new Promise(r => setTimeout(r, 4000));
+      elapsed += 4;
+      try {
+        const res = await fetch('https://api.gbif.org/v1/occurrence/download/' + downloadKey);
+        const json = await res.json();
+        status = json.status;
+        const totalRecords = json.totalRecords != null ? ' · ' + json.totalRecords.toLocaleString() + ' records found' : '';
+        if (status === 'SUCCEEDED') {
+          const totalRecords = json.totalRecords != null ? ' · ' + json.totalRecords.toLocaleString() + ' records' : '';
+          const downloadUrl = json.downloadLink;
+          // Open zip download directly in browser — no CORS issues
+          window.open(downloadUrl, '_blank');
+          setProgress(100, 'Download opened in new tab');
+          setStatus('Your GBIF download is ready' + totalRecords + '. The zip file has opened in a new tab — save it and extract the CSV. Use the exports below for map and checklist data.', 'success');
+          // Store download info for display
+          allFetched.push({ _downloadKey: downloadKey, _downloadUrl: downloadUrl, _totalRecords: json.totalRecords || 0, _polyId: poly.id });
+        } else if (status === 'FAILED' || status === 'KILLED' || status === 'CANCELLED') {
+          setStatus('GBIF download ' + status.toLowerCase() + '. Please try again.', 'error');
+          runBtn.disabled = false; return;
+        } else {
+          const pct = 10 + Math.min(35, Math.round(elapsed / 2));
+          setProgress(pct, 'GBIF status: ' + status + ' · ' + elapsed + 's elapsed');
+        }
+      } catch(e) {
+        setStatus('Error checking download status: ' + e.message, 'error');
+        runBtn.disabled = false; return;
+      }
+    }
+  }
+
+  if (allFetched.length === 0) { setStatus('No records found for any polygon with these parameters.', 'warning'); runBtn.disabled = false; return; }
+
+  // Show download info — the zip was opened in a new tab
+  const totalRecs = allFetched.reduce((sum, r) => sum + (r._totalRecords || 0), 0);
+  document.getElementById('mRecords').textContent = totalRecs.toLocaleString();
+  document.getElementById('mSpecies').textContent = '-';
+  document.getElementById('mShown').textContent = '-';
+  metricsGrid.style.display = 'grid';
+  outputSection.style.display = 'block';
+
+  // Now also fetch via search API for map display (quick preview)
+  setStatus('Zip downloaded. Now loading map preview via search API...', 'info');
+  const searchFetched = [];
+  for (let pi = 0; pi < polygons.length; pi++) {
+    const poly = polygons[pi];
+    const dateFrom  = document.getElementById('dateFrom').value;
+    const dateTo    = document.getElementById('dateTo').value || new Date().toISOString().split('T')[0];
+    const taxonKey  = document.getElementById('taxonGroup').value;
+    const coordOnly = document.getElementById('coordOnly').checked;
+    const baseParams = new URLSearchParams({ geometry: poly.wkt, hasCoordinate: coordOnly, limit: 300 });
+    if (dateFrom && dateTo) baseParams.set('eventDate', dateFrom + ',' + dateTo);
+    if (taxonKey && taxonKey !== 'fish') baseParams.set('classKey', taxonKey);
+    try {
+      const res = await fetch('https://api.gbif.org/v1/occurrence/search?' + baseParams);
+      if (res.ok) { const json = await res.json(); searchFetched.push(...(json.results || [])); }
+    } catch(e) {}
+  }
+
+  if (searchFetched.length > 0) {
+    allRecords = searchFetched;
+    const species = new Set(searchFetched.map(r => r.species || r.scientificName).filter(Boolean));
+    document.getElementById('mSpecies').textContent = species.size.toLocaleString() + '+';
+    document.getElementById('mShown').textContent = searchFetched.length.toLocaleString();
+    buildFilterChips(searchFetched);
+    buildChecklist(searchFetched);
+    renderPoints(searchFetched);
+    csvData = buildCSV(searchFetched);
+  }
+
+  setStatus('Complete — ' + totalRecs.toLocaleString() + ' records in your downloaded zip. Map shows a preview of up to 300 records.', 'success');
+  runBtn.disabled = false;
+});
+
+// Export
+function buildCSV(rows) {
+  const esc = v => { if (v == null) return ''; const s = String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+  return [CSV_FIELDS.join(','), ...rows.map(r => CSV_FIELDS.map(f => esc(r[f])).join(','))].join('\n');
+}
+function downloadBlob(content, filename, type) {
+  const blob = new Blob([content], { type }), url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+}
+
+document.getElementById('dlCsvBtn').addEventListener('click', () => {
+  if (csvData) downloadBlob(csvData, 'gbif_occurrences_' + new Date().toISOString().split('T')[0] + '.csv', 'text/csv;charset=utf-8;');
+});
+
+document.getElementById('dlGeoBtn').addEventListener('click', () => {
+  const filtered = allRecords.filter(r => passesFilters(r) && r.decimalLatitude != null);
+  const geojson = {
+    type: 'FeatureCollection',
+    features: filtered.map(r => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [r.decimalLongitude, r.decimalLatitude] },
+      properties: Object.fromEntries(CSV_FIELDS.map(f => [f, r[f] != null ? r[f] : null]))
+    }))
+  };
+  downloadBlob(JSON.stringify(geojson, null, 2), 'gbif_occurrences_' + new Date().toISOString().split('T')[0] + '.geojson', 'application/json');
+});
+
+document.getElementById('dlChecklistBtn').addEventListener('click', () => {
+  const filtered = allRecords.filter(passesFilters);
+  const counts = {};
+  filtered.forEach(r => {
+    const key = r.species || r.scientificName || 'Unknown';
+    if (!counts[key]) counts[key] = { scientificName: key, vernacularName: '', kingdom: r.kingdom||'', phylum: r.phylum||'', class: r.class||'', order: r.order||'', family: r.family||'', genus: r.genus||'', records: 0 };
+    counts[key].records++;
+    if (!counts[key].vernacularName && r.vernacularName) counts[key].vernacularName = r.vernacularName;
+  });
+  const fields = ['scientificName','vernacularName','kingdom','phylum','class','order','family','genus','records'];
+  const esc = v => { const s = String(v||''); return (s.includes(',') || s.includes('"')) ? '"' + s.replace(/"/g,'""') + '"' : s; };
+  downloadBlob(
+    [fields.join(','), ...Object.values(counts).sort((a,b) => a.scientificName.localeCompare(b.scientificName)).map(r => fields.map(f => esc(r[f])).join(','))].join('\n'),
+    'gbif_checklist_' + new Date().toISOString().split('T')[0] + '.csv',
+    'text/csv;charset=utf-8;'
+  );
+});
+</script>
+</body>
+</html>
