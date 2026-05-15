@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GBIF Occurrence Extractor · Rutherford Ecology</title>
+<title>GBIF Record Finder · Rutherford Ecology</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
@@ -203,6 +203,49 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 
 #map-wrap { position: relative; width: 100%; height: calc(100vh - 52px); overflow: hidden; }
 #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+
+/* Changelog panel — slides up from bottom of sidebar */
+.changelog-overlay { display:none; position:fixed; inset:0; z-index:9998; }
+.changelog-overlay.open { display:block; }
+.changelog-panel {
+  position: fixed;
+  bottom: 0; left: 0;
+  width: 320px;
+  max-height: 70vh;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-radius: 0 10px 0 0;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  z-index: 9999;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+.changelog-panel.open { transform: translateY(0); }
+.changelog-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; background: var(--surface2);
+  border-radius: 0 10px 0 0;
+}
+.changelog-title { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:var(--text3); }
+.changelog-close { cursor:pointer; font-size:16px; color:var(--text3); background:none; border:none; padding:2px 5px; border-radius:4px; }
+.changelog-close:hover { color:var(--red); background:var(--red-light); }
+.changelog-scroll { flex:1; overflow-y:auto; padding:1rem; }
+.changelog-version { margin-bottom:1.2rem; }
+.changelog-version-tag {
+  display: inline-block; font-size:11px; font-weight:700;
+  background: var(--green-dark); color: white;
+  border-radius: 4px; padding: 2px 8px; margin-bottom:4px;
+  letter-spacing: 0.04em;
+}
+.changelog-date { font-size:11px; color:var(--text3); margin-left:6px; }
+.changelog-version ul { margin:6px 0 0 0; padding-left:1.1rem; }
+.changelog-version li { font-size:12px; color:var(--text2); line-height:1.7; }
+.changelog-empty { font-size:12px; color:var(--text3); font-style:italic; padding:0.5rem 0; }
+@media (max-width:700px) { .changelog-panel { width:100%; border-radius:10px 10px 0 0; } }
 </style>
 </head>
 <body>
@@ -210,7 +253,7 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">· GBIF Occurrence Extractor</span>
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">· GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.0</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -226,12 +269,15 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 
     <div class="sidebar-section">
       <div class="section-label">1 · Define area</div>
-      <div class="instruction-box">Draw a polygon directly on the map using the polygon tool (top-left of map), or upload a <strong>KML or KMZ</strong> file. Multiple areas can be combined.</div>
-      <div class="drop-zone" id="dropZone">
+      <div class="drop-zone" id="dropZone" style="padding:12px 10px;">
         <input type="file" id="fileInput" accept=".kml,.kmz" multiple>
-        <div class="dz-icon">&#128506;</div>
-        <div class="dz-text">Drop KML/KMZ files here, or click to browse</div>
-        <div class="dz-sub">Polygon geometry &middot; multiple files supported</div>
+        <div style="font-size:12px;color:var(--green-dark);line-height:1.6;margin-bottom:8px;">
+          Draw a polygon on the map using the <strong>polygon tool</strong> (top-left of map), or drop a <strong>KML/KMZ</strong> file below. Multiple areas supported.
+        </div>
+        <div style="border-top:1px dashed var(--border2);padding-top:8px;display:flex;align-items:center;gap:8px;justify-content:center;">
+          <span style="font-size:18px;">&#128506;</span>
+          <span style="font-size:12px;color:var(--text2);">Drop KML/KMZ here, or <span style="color:var(--green);text-decoration:underline;">browse</span></span>
+        </div>
       </div>
       <div class="poly-list" id="polyList">
         <div class="poly-empty" id="polyEmpty">No polygons loaded</div>
@@ -346,9 +392,12 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 
     <div class="sidebar-footer">
       <p class="note">
-        Queries the <a href="https://techdocs.gbif.org/en/data-use/api-downloads" target="_blank">GBIF occurrence download API</a> — uses a dedicated GBIF account to retrieve complete datasets. Results are fully comprehensive with no record limits. For more information visit the <a href="https://www.gbif.org" target="_blank">GBIF portal</a>.<br><br>
-        © Rutherford Ecology
+        Queries the <a href="https://techdocs.gbif.org/en/data-use/api-downloads" target="_blank">GBIF occurrence download API</a> — uses a dedicated GBIF account to retrieve complete datasets. Results are fully comprehensive with no record limits. For more information visit the <a href="https://www.gbif.org" target="_blank">GBIF portal</a>.
       </p>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.6rem;">
+        <span class="note">© Rutherford Ecology</span>
+        <button id="changelogBtn" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text3);font-family:var(--font-sans);padding:2px 4px;border-radius:3px;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--text3)'">&#128221; Changelog</button>
+      </div>
     </div>
   </div>
 
@@ -1467,6 +1516,35 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     'text/csv;charset=utf-8;'
   );
 });
+
+// Changelog
+(function() {
+  const btn   = document.getElementById('changelogBtn');
+  const panel = document.getElementById('changelogPanel');
+  const overlay = document.getElementById('changelogOverlay');
+  const close = document.getElementById('changelogClose');
+  function openChangelog() { panel.classList.add('open'); overlay.classList.add('open'); }
+  function closeChangelog() { panel.classList.remove('open'); overlay.classList.remove('open'); }
+  btn.addEventListener('click', openChangelog);
+  close.addEventListener('click', closeChangelog);
+  overlay.addEventListener('click', closeChangelog);
+})();
 </script>
+
+<!-- Changelog panel -->
+<div class="changelog-overlay" id="changelogOverlay"></div>
+<div class="changelog-panel" id="changelogPanel">
+  <div class="changelog-header">
+    <span class="changelog-title">&#128221; Changelog — GBIF Record Finder</span>
+    <button class="changelog-close" id="changelogClose">&#x2715;</button>
+  </div>
+  <div class="changelog-scroll" id="changelogScroll">
+    <div class="changelog-version">
+      <span class="changelog-version-tag">v1.0</span>
+      <span class="changelog-date">May 2026</span>
+      <div class="changelog-empty">Initial release.</div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
