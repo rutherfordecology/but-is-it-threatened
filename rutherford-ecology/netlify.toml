@@ -1,5 +1,4 @@
 [build]
-  base = "rutherford-ecology"
   functions = "netlify/functions"
   publish = "."
 
