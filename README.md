@@ -71,3 +71,9 @@ Built by [Rutherford Ecology](https://sites.google.com/view/rutherford-ecology/)
 Find this useful? If you're using it for commercial work, supporting the developer is a legitimate business expense. And if you're just here because biodiversity data is genuinely interesting — that's worth a coffee too.
 
 ☕ [Buy me a coffee](https://buymeacoffee.com/rutherfordecology) · [rutherfordecology@gmail.com](mailto:rutherfordecology@gmail.com)
+
+---
+
+## Licence
+
+[MIT](LICENSE) — free to use, modify and distribute. Credit appreciated.
