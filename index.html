@@ -941,38 +941,13 @@ async function lookupCommonNames(records) {
     setProgress(50 + Math.round((done / total) * 45), 'Loading common names... ' + done + ' / ' + total + ' species');
   }
 
-  // 3. Majority-vote vernacular names from occurrence records in the dominant country only.
-  //    Also reject non-ASCII names when the preferred language is English, to prevent
-  //    foreign-language names from a minority of datasets winning the vote.
-  const asciiOnly = prefLang === 'eng' || prefLang === 'en';
-  const nameCounts = {};
+  // 3. Overwrite every record's vernacularName with the API result (or null).
+  //    Never trust the original value from the occurrence download — dataset publishers
+  //    use whatever language they like, producing foreign names for NZ/English searches.
   records.forEach(r => {
-    if (!r.taxonKey || !r.vernacularName || isBandingCode(r.vernacularName)) return;
-    if (dominantCountry && r.countryCode !== dominantCountry) return;
-    const n = r.vernacularName.trim();
-    if (asciiOnly && /[^\x00-\x7F]/.test(n)) return; // skip non-ASCII names for English regions
-    if (!nameCounts[r.taxonKey]) nameCounts[r.taxonKey] = {};
-    nameCounts[r.taxonKey][n] = (nameCounts[r.taxonKey][n] || 0) + 1;
-  });
-
-  // 4. Backfill: API name first (reliable language/country metadata), majority vote as fallback.
-  //    Always run the cleanup pass so banding codes and non-ASCII names are cleared even for
-  //    records that have no taxonKey (which would otherwise skip cleanup via early return).
-  records.forEach(r => {
-    if (r.taxonKey) {
-      const apiResults = commonNameCache[r.taxonKey];
-      const apiName = Array.isArray(apiResults) ? pickVernacularName(apiResults, dominantCountry, prefLang) : '';
-      if (apiName) { r.vernacularName = apiName; return; }
-      // Fallback: majority vote among occurrence records for this region
-      const votes = nameCounts[r.taxonKey];
-      if (votes) {
-        const top = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
-        if (top) { r.vernacularName = top[0]; return; }
-      }
-    }
-    // Clear any name that's still a banding code or (for English regions) non-ASCII
-    const vn = r.vernacularName;
-    if (vn && (isBandingCode(vn) || (asciiOnly && /[^\x00-\x7F]/.test(vn)))) r.vernacularName = null;
+    const cached = r.taxonKey ? commonNameCache[r.taxonKey] : undefined;
+    const apiName = Array.isArray(cached) ? pickVernacularName(cached, dominantCountry, prefLang) : '';
+    r.vernacularName = apiName || null;
   });
 }
 
