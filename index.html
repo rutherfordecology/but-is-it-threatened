@@ -822,6 +822,11 @@ document.getElementById('modalProceed').addEventListener('click', () => {
   if (pendingLoad) { addPolygon(pendingLoad.latlngs, pendingLoad.label); pendingLoad = null; }
 });
 
+// Returns true for banding codes / abbreviations (e.g. "COST", "CF") that are not real vernacular names
+function isBandingCode(name) {
+  return !!name && /^[A-Z]{1,6}$/.test(name.trim());
+}
+
 // Common name lookup
 async function lookupCommonNames(records) {
   const taxonKeys = [...new Set(records.map(r => r.taxonKey).filter(Boolean))];
@@ -845,7 +850,10 @@ async function lookupCommonNames(records) {
     }));
     setProgress(50 + Math.round((done / total) * 45), 'Loading common names... ' + done + ' / ' + total + ' species');
   }
-  records.forEach(r => { if (r.taxonKey && commonNameCache[r.taxonKey]) r.vernacularName = r.vernacularName || commonNameCache[r.taxonKey]; });
+  records.forEach(r => {
+    const apiName = r.taxonKey && commonNameCache[r.taxonKey];
+    if (apiName && (!r.vernacularName || isBandingCode(r.vernacularName))) r.vernacularName = apiName;
+  });
 }
 
 // CC photo cache: taxonKey → { url, licence, photographer } or null
@@ -892,11 +900,14 @@ function licenceBadge(licenceUrl) {
 // Build popup content for a single record
 // Helper: get the best display name for a record (common name preferred, scientific fallback)
 function getDisplayName(rec) {
-  return rec.vernacularName || (rec.taxonKey && commonNameCache[rec.taxonKey]) || rec.scientificName || rec.species || 'Unknown';
+  const vn = rec.vernacularName;
+  const common = (vn && !isBandingCode(vn)) ? vn : (rec.taxonKey && commonNameCache[rec.taxonKey]) || '';
+  return common || rec.scientificName || rec.species || 'Unknown';
 }
 
 function buildRecordPage(rec) {
-  const common  = rec.vernacularName || (rec.taxonKey && commonNameCache[rec.taxonKey]) || '';
+  const vn = rec.vernacularName;
+  const common  = (vn && !isBandingCode(vn)) ? vn : (rec.taxonKey && commonNameCache[rec.taxonKey]) || '';
   const primary = common
     ? '<div style="font-weight:600;font-size:13px;">' + common + '</div>' +
       '<div style="color:#9b9890;font-size:11px;font-style:italic;margin-top:1px;">' + (rec.scientificName || '') + '</div>'
@@ -1010,7 +1021,7 @@ function makeStackedPopup(stackedRecords) {
     const sci = r.scientificName || r.species || '';
     if (!speciesMap.has(sci)) {
       speciesMap.set(sci, {
-        common: r.vernacularName || (r.taxonKey && commonNameCache[r.taxonKey]) || '',
+        common: (r.vernacularName && !isBandingCode(r.vernacularName)) ? r.vernacularName : (r.taxonKey && commonNameCache[r.taxonKey]) || '',
         sci,
         taxonKey: r.taxonKey,
         records: []
