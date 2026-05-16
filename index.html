@@ -585,6 +585,10 @@ map.on(L.Draw.Event.CREATED, e => {
   const raw = e.layer.getLatLngs();
   const latlngs = Array.isArray(raw[0]) ? raw[0] : (raw[0].lat !== undefined ? raw : raw[0]);
   addPolygon(latlngs, 'Drawn polygon ' + (nextPolyId + 1));
+  // Disable draw toolbar so the closing click doesn't start a new polygon
+  if (drawControl._toolbars && drawControl._toolbars.draw) {
+    drawControl._toolbars.draw.disable();
+  }
 });
 
 // State
