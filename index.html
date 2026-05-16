@@ -334,7 +334,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.28</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.29</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1052,15 +1052,16 @@ function pickVernacularName(results, countryCode, prefLang) {
   const normLang = l => {
     if (!l) return '';
     l = l.toLowerCase();
-    if (l === 'en') return 'eng';
-    if (l === 'fr') return 'fra';
-    if (l === 'de') return 'deu';
-    if (l === 'es') return 'spa';
-    if (l === 'pt') return 'por';
-    if (l === 'it') return 'ita';
-    if (l === 'nl') return 'nld';
-    if (l === 'ja') return 'jpn';
-    if (l === 'zh') return 'zho';
+    // Handle BCP 47 codes like 'en-US', 'en-GB', 'fr-FR' as well as ISO 639-1/2
+    if (l === 'en' || l.startsWith('en-')) return 'eng';
+    if (l === 'fr' || l.startsWith('fr-')) return 'fra';
+    if (l === 'de' || l.startsWith('de-')) return 'deu';
+    if (l === 'es' || l.startsWith('es-')) return 'spa';
+    if (l === 'pt' || l.startsWith('pt-')) return 'por';
+    if (l === 'it' || l.startsWith('it-')) return 'ita';
+    if (l === 'nl' || l.startsWith('nl-')) return 'nld';
+    if (l === 'ja' || l.startsWith('ja-')) return 'jpn';
+    if (l === 'zh' || l.startsWith('zh-')) return 'zho';
     return l.substring(0, 3);
   };
   const pl = normLang(prefLang);
@@ -1165,11 +1166,16 @@ async function lookupCommonNames(records) {
     if (apiName && asciiOnly && /[^\x00-\x7F]/.test(apiName)) apiName = '';
     if (apiName && isBandingCode(apiName)) apiName = '';
     if (apiName) { r.vernacularName = apiName; return; }
-    // Fallback: most-common name from same-country occurrence records
-    const votes = r.taxonKey ? voteCounts[r.taxonKey] : null;
-    if (votes) {
-      const top = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
-      if (top) { r.vernacularName = top[0]; return; }
+    // Fallback: most-common name from same-country occurrence records.
+    // Skip if the API returned results for this taxon — the API had a chance to provide
+    // a name and didn't, so the occurrence-record names are likely foreign-locale noise.
+    const hasApiResults = Array.isArray(cached) && cached.length > 0;
+    if (!hasApiResults) {
+      const votes = r.taxonKey ? voteCounts[r.taxonKey] : null;
+      if (votes) {
+        const top = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+        if (top) { r.vernacularName = top[0]; return; }
+      }
     }
     r.vernacularName = null;
   });
