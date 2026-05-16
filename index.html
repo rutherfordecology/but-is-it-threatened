@@ -334,7 +334,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.32</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.33</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1305,7 +1305,7 @@ function buildRecordPage(rec) {
       camBtn + '</div>'
     : '';
   return {
-    html: '<div id="' + photoId + '" style="margin-bottom:8px;"></div>' +
+    html: '<div id="' + photoId + '" data-taxon-key="' + (rec.taxonKey||'') + '" data-sci-name="' + (rec.scientificName||'').replace(/"/g,'&quot;') + '" style="margin-bottom:8px;"></div>' +
           primary + cls + date + source + uncert + link,
     photoId,
     taxonKey: rec.taxonKey,
@@ -1338,11 +1338,23 @@ async function loadPopupPhoto(photoId, taxonKey, sciName) {
 // Registry for per-record photos so camera buttons can look them up by key
 window._gbifRecordPhotos = {};
 window._gbifShowRecordPhoto = function(slotId, photoKey) {
-  const photo = window._gbifRecordPhotos[photoKey];
-  const slot  = document.getElementById(slotId);
-  if (!slot || !photo) return;
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
   const imgH = window.innerWidth < 768 ? '130px' : '260px';
+
+  // Toggle: if currently showing the record photo, revert to species photo
+  if (slot.dataset.showingRecord === '1') {
+    slot.dataset.showingRecord = '0';
+    delete slot.dataset.loaded;
+    slot.innerHTML = '<div style="font-size:11px;color:#9b9890;padding:2px 0;">Loading photo…</div>';
+    loadPopupPhoto(slotId, slot.dataset.taxonKey || null, slot.dataset.sciName || '');
+    return;
+  }
+
+  const photo = window._gbifRecordPhotos[photoKey];
+  if (!photo) return;
   slot.dataset.loaded = '1'; // prevent species photo from loading on top
+  slot.dataset.showingRecord = '1';
   slot.innerHTML =
     '<img src="' + photo.url + '" alt="" ' +
     'style="width:100%;height:' + imgH + ';object-fit:cover;border-radius:4px;display:block;" ' +
@@ -1406,6 +1418,9 @@ window._gbifSelectSpecies = function(pid, spIdx) {
   if (photoSlotEl) {
     photoSlotEl.innerHTML = '';
     delete photoSlotEl.dataset.loaded;
+    photoSlotEl.dataset.showingRecord = '0';
+    photoSlotEl.dataset.taxonKey = sp.taxonKey || '';
+    photoSlotEl.dataset.sciName  = sp.sci || '';
     setTimeout(() => loadPopupPhoto(pid + '-photo', sp.taxonKey, sp.sci), 30);
   }
 };
