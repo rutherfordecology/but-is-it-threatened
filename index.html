@@ -862,23 +862,28 @@ const photoCache = {};
 async function fetchSpeciesPhoto(taxonKey) {
   if (!taxonKey) return null;
   if (photoCache[taxonKey] !== undefined) return photoCache[taxonKey];
-  photoCache[taxonKey] = null; // prevent duplicate fetches
-  try {
-    const res = await fetch('https://api.gbif.org/v1/occurrence/search?taxonKey=' + taxonKey + '&mediaType=StillImage&limit=5');
-    if (!res.ok) return null;
-    const json = await res.json();
-    for (const occ of (json.results || [])) {
-      const img = (occ.media || []).find(m => m.type === 'StillImage' && m.identifier);
-      if (img) {
-        photoCache[taxonKey] = {
-          url: img.identifier,
-          licence: img.license || '',
-          photographer: img.rightsHolder || img.creator || ''
-        };
-        return photoCache[taxonKey];
+  photoCache[taxonKey] = null;
+  // Try iNaturalist occurrences first (best CC photo quality in GBIF), then fall back to all sources
+  const inatKey = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
+  const attempts = [
+    'https://api.gbif.org/v1/occurrence/search?taxonKey=' + taxonKey + '&mediaType=StillImage&datasetKey=' + inatKey + '&limit=5',
+    'https://api.gbif.org/v1/occurrence/search?taxonKey=' + taxonKey + '&mediaType=StillImage&limit=15'
+  ];
+  for (const url of attempts) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const json = await res.json();
+      for (const occ of (json.results || [])) {
+        const img = (occ.media || []).find(m => m.type === 'StillImage' && m.identifier);
+        if (img) {
+          photoCache[taxonKey] = { url: img.identifier, licence: img.license || '', photographer: img.rightsHolder || img.creator || '' };
+          return photoCache[taxonKey];
+        }
       }
-    }
-  } catch(e) {}
+    } catch(e) {}
+    if (photoCache[taxonKey]) return photoCache[taxonKey];
+  }
   return null;
 }
 
@@ -921,8 +926,10 @@ function buildRecordPage(rec) {
   const link    = gbifId ? '<div style="margin-top:4px;"><a href="https://www.gbif.org/occurrence/' + gbifId + '" target="_blank" rel="noopener" style="color:#2a7a58;font-size:12px;">View on GBIF \u2197</a></div>' : '';
   const photoId = 'gbif-photo-' + (gbifId || Math.random().toString(36).slice(2));
   return {
-    html: '<div id="' + photoId + '" style="margin-bottom:5px;"></div>' +
-          primary + cls + date + source + uncert + geoWarn + link,
+    html: '<div style="display:flex;gap:10px;">' +
+            '<div style="flex:1;min-width:0;">' + primary + cls + date + source + uncert + geoWarn + link + '</div>' +
+            '<div id="' + photoId + '" style="width:150px;min-width:150px;flex-shrink:0;"></div>' +
+          '</div>',
     photoId,
     taxonKey: rec.taxonKey,
     scientificName: rec.scientificName || ''
@@ -939,9 +946,9 @@ async function loadPopupPhoto(photoId, taxonKey, sciName) {
   if (photo) {
     slot.innerHTML =
       '<img src="' + photo.url + '" alt="' + (sciName || '') + '" ' +
-      'style="width:100%;max-height:160px;object-fit:contain;background:#f3f2ee;border-radius:4px;display:block;" ' +
+      'style="width:100%;height:170px;object-fit:cover;border-radius:4px;display:block;" ' +
       'onerror="this.parentElement.innerHTML=\'\'"> ' +
-      '<div style="font-size:10px;color:#9b9890;margin-top:3px;line-height:1.4;">' +
+      '<div style="font-size:9px;color:#9b9890;margin-top:2px;line-height:1.3;">' +
       licenceBadge(photo.licence) + (photo.photographer || '') + '</div>';
   } else {
     slot.innerHTML = '';
@@ -983,11 +990,14 @@ window._gbifSelectSpecies = function(pid, spIdx) {
 
   const detailEl = document.getElementById(pid + '-detail');
   if (detailEl) {
-    detailEl.innerHTML =
-      '<div id="' + photoSlotId + '" style="margin-bottom:6px;"></div>' +
-      nameHtml +
-      '<div style="margin-top:5px;">' + recordRows + '</div>';
-    setTimeout(() => loadPopupPhoto(photoSlotId, sp.taxonKey, sp.sci), 30);
+    detailEl.innerHTML = nameHtml + '<div style="margin-top:5px;">' + recordRows + '</div>';
+  }
+
+  const photoSlotEl = document.getElementById(pid + '-photo');
+  if (photoSlotEl) {
+    photoSlotEl.innerHTML = '';
+    delete photoSlotEl.dataset.loaded;
+    setTimeout(() => loadPopupPhoto(pid + '-photo', sp.taxonKey, sp.sci), 30);
   }
 };
 
@@ -1050,13 +1060,20 @@ function makeStackedPopup(stackedRecords) {
       '</div>'
     ).join('');
 
-    const header = '<div style="font-size:10.5px;color:#2a7a58;font-weight:600;margin-bottom:5px;">📍 ' + total + ' records · ' + speciesCount + ' species</div>';
-    const list = '<div id="' + popupId + '-splist" style="overflow-y:auto;max-height:115px;border-bottom:1px solid #eee;margin-bottom:7px;">' + spItems + '</div>';
-    const detail = '<div id="' + popupId + '-detail"></div>';
-    return header + list + detail;
+    const pin = '📍';
+    return (
+      '<div style="display:flex;gap:12px;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:10.5px;color:#2a7a58;font-weight:600;margin-bottom:5px;">' + pin + ' ' + total + ' records \xb7 ' + speciesCount + ' species</div>' +
+          '<div id="' + popupId + '-splist" style="overflow-y:auto;max-height:120px;border-bottom:1px solid #eee;margin-bottom:6px;">' + spItems + '</div>' +
+          '<div id="' + popupId + '-detail"></div>' +
+        '</div>' +
+        '<div id="' + popupId + '-photo" style="width:160px;min-width:160px;flex-shrink:0;"></div>' +
+      '</div>'
+    );
   }
 
-  const popup = L.popup({ maxWidth: isMulti ? 340 : 290, minWidth: isMulti ? 300 : 240, autoPan: true });
+  const popup = L.popup({ maxWidth: isMulti ? 460 : 380, minWidth: isMulti ? 400 : 340, autoPan: true });
   window._gbifPopupState[popupId] = { idx: 0, sorted, popup, multiRecord: isMulti, speciesList };
 
   popup.setContent(buildShell());
