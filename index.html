@@ -334,7 +334,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.25</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.26</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -651,7 +651,7 @@ window.addEventListener('load', () => {
 });
 
 const polyLayer = L.featureGroup().addTo(map);
-let clusterLayer = null, heatLayer = null, fadedLayer = null;
+let clusterLayer = null, heatLayer = null;
 
 const drawControl = new L.Control.Draw({
   edit: { featureGroup: polyLayer, edit: false, remove: false },
@@ -901,7 +901,6 @@ function clearResults() {
   clScroll.innerHTML = ''; clSelectedInfo.style.display = 'none';
   if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
   if (heatLayer)    { map.removeLayer(heatLayer);    heatLayer = null; }
-  if (fadedLayer)   { map.removeLayer(fadedLayer);   fadedLayer = null; }
 }
 
 // Polygons
@@ -1468,15 +1467,18 @@ function renderPoints(records) {
   allMarkers = [];
   if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
   if (heatLayer)    { map.removeLayer(heatLayer); }
-  if (fadedLayer)   { map.removeLayer(fadedLayer); fadedLayer = null; }
   clusterLayer = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 14 });
-  fadedLayer   = L.layerGroup();
 
   const filtered = records.filter(passesFilters);
 
+  // When a species is selected, only cluster that species' records so counts are accurate
+  const toCluster = selectedSpecies
+    ? filtered.filter(r => (r.species || r.scientificName || '') === selectedSpecies)
+    : filtered;
+
   // Group records by exact lat/lng so stacked points share one marker
   const locationMap = new Map();
-  filtered.forEach(r => {
+  toCluster.forEach(r => {
     if (r.decimalLatitude == null || r.decimalLongitude == null) return;
     const key = r.decimalLatitude.toFixed(6) + ',' + r.decimalLongitude.toFixed(6);
     if (!locationMap.has(key)) locationMap.set(key, []);
@@ -1485,25 +1487,10 @@ function renderPoints(records) {
 
   let shown = 0;
   locationMap.forEach(stack => {
-    if (selectedSpecies) {
-      // Split stack: matching species → cluster (highlighted), others → faded non-clustered layer
-      const match   = stack.filter(r => (r.species || r.scientificName || '') === selectedSpecies);
-      const noMatch = stack.filter(r => (r.species || r.scientificName || '') !== selectedSpecies);
-      if (match.length > 0) {
-        const m = makeMarker(match);
-        if (m) { clusterLayer.addLayer(m); match.forEach(r => allMarkers.push({ marker: m, record: r })); shown += match.length; }
-      }
-      if (noMatch.length > 0) {
-        const m = makeMarker(noMatch);
-        if (m) { m.setStyle({ fillOpacity: 0.1, opacity: 0.15 }); fadedLayer.addLayer(m); noMatch.forEach(r => allMarkers.push({ marker: m, record: r })); }
-      }
-    } else {
-      const m = makeMarker(stack);
-      if (m) { clusterLayer.addLayer(m); stack.forEach(r => allMarkers.push({ marker: m, record: r })); shown += stack.length; }
-    }
+    const m = makeMarker(stack);
+    if (m) { clusterLayer.addLayer(m); stack.forEach(r => allMarkers.push({ marker: m, record: r })); shown += stack.length; }
   });
 
-  map.addLayer(fadedLayer);
   map.addLayer(clusterLayer);
   document.getElementById('mShown').textContent = shown.toLocaleString();
   csvData = buildCSV(filtered);
