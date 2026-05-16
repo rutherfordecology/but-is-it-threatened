@@ -320,7 +320,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.13</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.14</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1999,7 +1999,7 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
   );
 });
 
-// Changelog — panel HTML is after </script> so look up elements lazily on first click
+// Changelog — panel HTML is declared after the script block, so look up elements lazily on first click
 (function() {
   const btn = document.getElementById('changelogBtn');
   if (!btn) return;
