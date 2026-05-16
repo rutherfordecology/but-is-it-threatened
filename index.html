@@ -334,7 +334,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.29</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.30</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1067,6 +1067,9 @@ function pickVernacularName(results, countryCode, prefLang) {
   const pl = normLang(prefLang);
   const cc = (countryCode || '').toUpperCase();
   const pick = (pred) => results.find(v => v.vernacularName && pred(v));
+  // Proper English common names have every word starting with an uppercase letter
+  // (e.g. "Common Mallard") — use this to filter out mislabelled foreign names
+  const properCaps = v => v.vernacularName && v.vernacularName.split(/\s+/).every(w => /^[A-Z]/.test(w));
 
   // 1. Country match, preferred entries only (skip if no country provided — empty cc would
   //    match null-country entries in any language)
@@ -1075,37 +1078,46 @@ function pickVernacularName(results, countryCode, prefLang) {
     if (r1) return r1.vernacularName;
   }
 
-  // 2. Preferred language — preferred:true entries only to avoid obscure/mislabelled names
-  const r2 = pick(v => normLang(v.language) === pl && v.preferred);
+  // 2. Preferred language, preferred:true, properly capitalised (most trustworthy)
+  const r2 = pick(v => normLang(v.language) === pl && v.preferred && properCaps(v));
   if (r2) return r2.vernacularName;
 
-  // 3. English fallback for non-English regions — preferred:true only
+  // 3. Preferred language, preferred:true, any capitalisation
+  const r3 = pick(v => normLang(v.language) === pl && v.preferred);
+  if (r3) return r3.vernacularName;
+
+  // 4. English fallback for non-English regions — preferred:true, properly capitalised
   if (pl !== 'eng') {
-    const r3 = pick(v => normLang(v.language) === 'eng' && v.preferred);
-    if (r3) return r3.vernacularName;
+    const r4a = pick(v => normLang(v.language) === 'eng' && v.preferred && properCaps(v));
+    if (r4a) return r4a.vernacularName;
+    const r4b = pick(v => normLang(v.language) === 'eng' && v.preferred);
+    if (r4b) return r4b.vernacularName;
   }
 
-  // Fallback tiers: non-preferred entries (caller still applies ASCII + banding-code filters)
+  // Fallback tiers: non-preferred entries
   if (cc) {
-    const r4 = pick(v => (v.country||'').toUpperCase() === cc);
-    if (r4) return r4.vernacularName;
+    const r5 = pick(v => (v.country||'').toUpperCase() === cc);
+    if (r5) return r5.vernacularName;
   }
-  const r5 = pick(v => normLang(v.language) === pl);
-  if (r5) return r5.vernacularName;
-  if (pl !== 'eng') {
-    const r6 = pick(v => normLang(v.language) === 'eng');
-    if (r6) return r6.vernacularName;
-  }
+  // Preferred language, non-preferred, properly capitalised
+  const r6 = pick(v => normLang(v.language) === pl && properCaps(v));
+  if (r6) return r6.vernacularName;
+  const r7 = pick(v => normLang(v.language) === pl);
+  if (r7) return r7.vernacularName;
 
-  // Last resort: any English entry regardless of preferred flag
-  const rEng = pick(v => normLang(v.language) === 'eng');
-  if (rEng) return rEng.vernacularName;
+  // English fallback, non-preferred, properly capitalised
+  const r8 = pick(v => normLang(v.language) === 'eng' && properCaps(v));
+  if (r8) return r8.vernacularName;
+  const r9 = pick(v => normLang(v.language) === 'eng');
+  if (r9) return r9.vernacularName;
 
-  // GBIF often stores vernacular names with no language tag — prefer preferred, then any
-  const rNullPref = pick(v => !v.language && v.preferred);
+  // GBIF often stores vernacular names with no language tag
+  const rNullPref = pick(v => !v.language && v.preferred && properCaps(v));
   if (rNullPref) return rNullPref.vernacularName;
-  const rNull = pick(v => !v.language);
+  const rNull = pick(v => !v.language && properCaps(v));
   if (rNull) return rNull.vernacularName;
+  const rNullAny = pick(v => !v.language);
+  if (rNullAny) return rNullAny.vernacularName;
 
   return ''; // no match — caller will fall back to scientific name
 }
