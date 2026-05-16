@@ -592,7 +592,7 @@ map.on(L.Draw.Event.CREATED, e => {
 let polygons = [], allRecords = [], activeFilters = new Set();
 let viewMode = 'points', selectedSpecies = null, nextPolyId = 0, csvData = null, pendingLoad = null;
 let allMarkers = [];
-let commonNameCache = {};
+let commonNameCache = {}; // taxonKey → Array of { vernacularName, language, country } from GBIF species API
 
 // UI refs
 const runBtn         = document.getElementById('runBtn');
@@ -844,34 +844,54 @@ const COUNTRY_LANG = {
   IN:'hin', ID:'ind', MY:'msa',
 };
 
-function matchesLang(v, lang) {
-  if (!v.language) return false;
-  if (v.language === lang) return true;
-  // Handle eng/en duality
-  if (lang === 'eng') return v.language === 'en';
-  if (lang === 'en')  return v.language === 'eng';
-  // Also try 2-letter prefix match (e.g. 'fra' matches 'fr')
-  return v.language === lang.substring(0, 2);
+// Pick the best vernacular name from a GBIF /vernacularNames results array.
+// Priority: exact country match → preferred language → English → any name.
+function pickVernacularName(results, countryCode, prefLang) {
+  if (!results || results.length === 0) return '';
+  const normLang = l => {
+    if (!l) return '';
+    l = l.toLowerCase();
+    if (l === 'en') return 'eng';
+    if (l === 'fr') return 'fra';
+    if (l === 'de') return 'deu';
+    if (l === 'es') return 'spa';
+    if (l === 'pt') return 'por';
+    if (l === 'it') return 'ita';
+    if (l === 'nl') return 'nld';
+    if (l === 'ja') return 'jpn';
+    if (l === 'zh') return 'zho';
+    return l.substring(0, 3); // normalise to 3-char
+  };
+  const pl = normLang(prefLang);
+  const cc = (countryCode || '').toUpperCase();
+
+  // 1. Country code match (any language) — most locally specific
+  const byCountry = results.find(v => (v.country || '').toUpperCase() === cc && v.vernacularName);
+  if (byCountry) return byCountry.vernacularName;
+
+  // 2. Preferred language match
+  const byLang = results.find(v => normLang(v.language) === pl && v.vernacularName);
+  if (byLang) return byLang.vernacularName;
+
+  // 3. English fallback
+  if (pl !== 'eng') {
+    const byEng = results.find(v => normLang(v.language) === 'eng' && v.vernacularName);
+    if (byEng) return byEng.vernacularName;
+  }
+
+  // 4. Any name
+  return results.find(v => v.vernacularName)?.vernacularName || '';
 }
 
 // Common name lookup
 async function lookupCommonNames(records) {
-  // 1. Majority-vote vernacular names from occurrence records (handles local preference, e.g. "Tui" > "Parson Bird")
-  const nameCounts = {}; // taxonKey → { name: count }
-  records.forEach(r => {
-    if (!r.taxonKey || !r.vernacularName || isBandingCode(r.vernacularName)) return;
-    const n = r.vernacularName.trim();
-    if (!nameCounts[r.taxonKey]) nameCounts[r.taxonKey] = {};
-    nameCounts[r.taxonKey][n] = (nameCounts[r.taxonKey][n] || 0) + 1;
-  });
-
-  // 2. Detect dominant country → preferred language for GBIF species API lookups
+  // 1. Detect dominant country → preferred language for this batch of records
   const countryCounts = {};
   records.forEach(r => { if (r.countryCode) countryCounts[r.countryCode] = (countryCounts[r.countryCode] || 0) + 1; });
-  const dominantCountry = Object.entries(countryCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const dominantCountry = Object.entries(countryCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
   const prefLang = (dominantCountry && COUNTRY_LANG[dominantCountry]) || 'eng';
 
-  // 3. Fetch GBIF species vernacular names, preferring regional language then English
+  // 2. Fetch GBIF species vernacular name lists, caching the raw results array per taxon
   const taxonKeys = [...new Set(records.map(r => r.taxonKey).filter(Boolean))];
   const total = taxonKeys.length;
   let done = 0;
@@ -881,30 +901,37 @@ async function lookupCommonNames(records) {
     await Promise.all(batch.map(async key => {
       if (commonNameCache[key] !== undefined) return;
       try {
-        const res = await fetch('https://api.gbif.org/v1/species/' + key + '/vernacularNames?limit=20');
-        if (!res.ok) { commonNameCache[key] = ''; return; }
+        const res = await fetch('https://api.gbif.org/v1/species/' + key + '/vernacularNames?limit=100');
+        if (!res.ok) { commonNameCache[key] = []; return; }
         const json = await res.json();
-        const results = json.results || [];
-        const langName = results.find(v => matchesLang(v, prefLang));
-        const enName   = (prefLang !== 'eng') ? results.find(v => matchesLang(v, 'eng')) : null;
-        const anyName  = results[0];
-        commonNameCache[key] = (langName || enName || anyName)?.vernacularName || '';
-      } catch(e) { commonNameCache[key] = ''; }
+        commonNameCache[key] = json.results || [];
+      } catch(e) { commonNameCache[key] = []; }
       done++;
     }));
     setProgress(50 + Math.round((done / total) * 45), 'Loading common names... ' + done + ' / ' + total + ' species');
   }
 
-  // 4. Backfill: prefer majority-voted occurrence name, then GBIF API name
+  // 3. Backfill each record: pick best name from API results using country + language priority.
+  //    Fall back to majority-voted occurrence name only when API has nothing.
+  const nameCounts = {};
+  records.forEach(r => {
+    if (!r.taxonKey || !r.vernacularName || isBandingCode(r.vernacularName)) return;
+    const n = r.vernacularName.trim();
+    if (!nameCounts[r.taxonKey]) nameCounts[r.taxonKey] = {};
+    nameCounts[r.taxonKey][n] = (nameCounts[r.taxonKey][n] || 0) + 1;
+  });
+
   records.forEach(r => {
     if (!r.taxonKey) return;
+    const apiResults = commonNameCache[r.taxonKey];
+    const apiName = Array.isArray(apiResults) ? pickVernacularName(apiResults, dominantCountry, prefLang) : '';
+    if (apiName) { r.vernacularName = apiName; return; }
+    // API had nothing — fall back to majority-voted occurrence name
     const votes = nameCounts[r.taxonKey];
     if (votes) {
       const top = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
-      if (top) { r.vernacularName = top[0]; return; }
+      if (top) r.vernacularName = top[0];
     }
-    const apiName = commonNameCache[r.taxonKey];
-    if (apiName) r.vernacularName = apiName;
   });
 }
 
@@ -955,16 +982,21 @@ function licenceBadge(licenceUrl) {
 
 // Map rendering
 // Build popup content for a single record
+function cachedName(taxonKey) {
+  const r = taxonKey && commonNameCache[taxonKey];
+  return Array.isArray(r) ? pickVernacularName(r, '', 'eng') : '';
+}
+
 // Helper: get the best display name for a record (common name preferred, scientific fallback)
 function getDisplayName(rec) {
   const vn = rec.vernacularName;
-  const common = (vn && !isBandingCode(vn)) ? vn : (rec.taxonKey && commonNameCache[rec.taxonKey]) || '';
+  const common = (vn && !isBandingCode(vn)) ? vn : cachedName(rec.taxonKey);
   return common || rec.scientificName || rec.species || 'Unknown';
 }
 
 function buildRecordPage(rec) {
   const vn = rec.vernacularName;
-  const common  = (vn && !isBandingCode(vn)) ? vn : (rec.taxonKey && commonNameCache[rec.taxonKey]) || '';
+  const common  = (vn && !isBandingCode(vn)) ? vn : cachedName(rec.taxonKey);
   const primary = common
     ? '<div style="font-weight:600;font-size:13px;">' + common + '</div>' +
       '<div style="color:#9b9890;font-size:11px;font-style:italic;margin-top:1px;">' + (rec.scientificName || '') + '</div>'
@@ -1081,7 +1113,7 @@ function makeStackedPopup(stackedRecords) {
     const sci = r.scientificName || r.species || '';
     if (!speciesMap.has(sci)) {
       speciesMap.set(sci, {
-        common: (r.vernacularName && !isBandingCode(r.vernacularName)) ? r.vernacularName : (r.taxonKey && commonNameCache[r.taxonKey]) || '',
+        common: (r.vernacularName && !isBandingCode(r.vernacularName)) ? r.vernacularName : cachedName(r.taxonKey),
         sci,
         taxonKey: r.taxonKey,
         records: []
@@ -1292,7 +1324,7 @@ function buildChecklist(records) {
     if (!byGroup[g][name]) byGroup[g][name] = { count: 0, taxonKey: key, common: '' };
     byGroup[g][name].count++;
     if (!byGroup[g][name].common && r.vernacularName) byGroup[g][name].common = r.vernacularName;
-    if (!byGroup[g][name].common && r.taxonKey && commonNameCache[r.taxonKey]) byGroup[g][name].common = commonNameCache[r.taxonKey];
+    if (!byGroup[g][name].common && r.taxonKey) byGroup[g][name].common = cachedName(r.taxonKey);
   });
   clScroll.innerHTML = '';
   Object.keys(byGroup).sort().forEach(g => {
