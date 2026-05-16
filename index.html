@@ -401,9 +401,9 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
       </div>
       <button class="tool-btn" id="btnChecklist" onclick="toggleChecklist()" style="width:100%;margin-top:6px;">Show species checklist</button>
       <div class="export-row" style="margin-top:0.75rem;">
-        <button class="dl-btn" id="dlCsvBtn">&#8595; CSV (filtered)</button>
+        <button class="dl-btn" id="dlCsvBtn">&#8595; Occurrences CSV</button>
         <button class="dl-btn" id="dlGeoBtn">&#8595; GeoJSON</button>
-        <button class="dl-btn full" id="dlChecklistBtn">&#8595; Species checklist CSV</button>
+        <button class="dl-btn full" id="dlChecklistBtn">&#8595; Species list CSV</button>
       </div>
     </div>
 
@@ -1099,7 +1099,7 @@ window._gbifSelectSpecies = function(pid, spIdx) {
     });
   }
 
-  // Build record rows for this species in a scrollable container (5 rows visible)
+  // Build record rows for this species in a scrollable container
   const photoSlotId = pid + '-photo-' + spIdx;
   const recordRowsInner = sp.records.map(r => {
     const date = r.eventDate ? '<span style="font-size:12px;">' + r.eventDate + '</span>' : '';
@@ -1108,9 +1108,10 @@ window._gbifSelectSpecies = function(pid, spIdx) {
       : '';
     return '<div style="padding:1px 0;">' + date + link + '</div>';
   }).join('');
-  const recordRows = sp.records.length > 5
-    ? '<div style="max-height:115px;overflow-y:auto;padding-right:2px;">' + recordRowsInner + '</div>'
-    : recordRowsInner;
+  const countLabel = '<div style="font-size:11px;color:#9b9890;margin-bottom:2px;">' + sp.records.length + ' record' + (sp.records.length === 1 ? '' : 's') + (sp.records.length > 5 ? ' — scroll to see all' : '') + '</div>';
+  const recordRows = countLabel + (sp.records.length > 5
+    ? '<div style="max-height:115px;overflow-y:scroll;padding-right:2px;">' + recordRowsInner + '</div>'
+    : recordRowsInner);
 
   const nameHtml = sp.common
     ? '<div style="font-weight:600;font-size:13px;">' + sp.common + '</div>' +
