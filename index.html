@@ -1520,20 +1520,43 @@ function buildFilterChips(records) {
   const groups = {};
   records.forEach(r => { const g = getTaxonGroup(r); groups[g] = (groups[g] || 0) + 1; });
   filterChips.innerHTML = ''; legendItems.innerHTML = '';
-  Object.keys(groups).sort().forEach(g => {
+  const allGroupKeys = Object.keys(groups).sort();
+  const chipMap = {};
+
+  function refreshChips() {
+    allGroupKeys.forEach(k => {
+      if (chipMap[k]) chipMap[k].classList.toggle('off', !activeFilters.has(k));
+    });
+    if (viewMode === 'points') renderPoints(allRecords);
+    else renderHeatmap(allRecords);
+    filterChecklistByTaxon();
+  }
+
+  allGroupKeys.forEach(g => {
     const colour = (TAXON_COLOURS[g] || TAXON_COLOURS['Other']).colour;
     const label  = (TAXON_COLOURS[g] || { label: g }).label;
     const chip   = document.createElement('div'); chip.className = 'chip'; chip.dataset.group = g;
     chip.textContent = label + ' (' + groups[g] + ')';
     chip.style.cssText = 'background:' + colour + '33;border-color:' + colour + ';color:' + colour;
-    activeFilters.add(g); // start all on
+    chip.title = 'Click to isolate; click again to show all';
+    activeFilters.add(g);
+    chipMap[g] = chip;
+
     chip.addEventListener('click', () => {
-      if (activeFilters.has(g)) { activeFilters.delete(g); chip.classList.add('off'); }
-      else { activeFilters.add(g); chip.classList.remove('off'); }
-      if (viewMode === 'points') renderPoints(allRecords);
-      else renderHeatmap(allRecords);
-      filterChecklistByTaxon();
+      const activeCount = allGroupKeys.filter(k => activeFilters.has(k)).length;
+      if (!activeFilters.has(g)) {
+        // Chip is off — turn it back on
+        activeFilters.add(g);
+      } else if (activeCount === 1) {
+        // This is the only active chip — restore all
+        allGroupKeys.forEach(k => activeFilters.add(k));
+      } else {
+        // Multiple chips on — isolate to just this one
+        allGroupKeys.forEach(k => { if (k !== g) activeFilters.delete(k); });
+      }
+      refreshChips();
     });
+
     filterChips.appendChild(chip);
     const item = document.createElement('div'); item.className = 'legend-item';
     item.innerHTML = '<div class="legend-dot" style="background:' + colour + '"></div>' + label;
