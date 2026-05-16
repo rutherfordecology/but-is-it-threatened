@@ -384,10 +384,9 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 
       <!-- Data quality summary -->
       <div class="quality-box" id="qualityBox">
-        <strong>&#9888; Data quality flags</strong>
-        <div class="quality-row"><span>Records without coordinates</span><span class="quality-val" id="qNoCoord">-</span></div>
-        <div class="quality-row"><span>Records with geospatial issues</span><span class="quality-val" id="qGeoIssue">-</span></div>
-        <div class="quality-row"><span>High coord. uncertainty (&gt;1 km)</span><span class="quality-val" id="qHighUncert">-</span></div>
+        <strong>&#9888; Coordinate precision</strong>
+        <div class="quality-row"><span>Low precision (&gt;1.5 km uncertainty)</span><span class="quality-val" id="qHighUncert">-</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">Low-precision records are shown as faint dots on the map.</div>
       </div>
 
       <!-- Species richness per polygon -->
@@ -1028,14 +1027,14 @@ function buildRecordPage(rec) {
   const cls     = rec.class ? '<div style="color:#9b9890;font-size:11px;">' + rec.class + '</div>' : '';
   const date    = rec.eventDate   ? '<div style="margin-top:4px;font-size:12px;"><b>Date:</b> ' + rec.eventDate + '</div>' : '';
   const source  = rec.datasetName ? '<div style="font-size:12px;"><b>Source:</b> ' + rec.datasetName + '</div>' : '';
-  const uncert  = rec.coordinateUncertaintyInMeters ? '<div style="font-size:11px;color:#9b9890;">Coord. uncertainty: ' + parseFloat(rec.coordinateUncertaintyInMeters).toLocaleString() + ' m</div>' : '';
-  const geoWarn = rec.hasGeospatialIssues === 'true' ? '<div style="font-size:11px;color:#8a2c2c;margin-top:2px;">\u26a0 Geospatial issues flagged</div>' : '';
+  const uncertVal = parseFloat(rec.coordinateUncertaintyInMeters);
+  const uncert  = uncertVal >= 1500 ? '<div style="font-size:11px;color:#9b9890;">\u26a0 Low precision: \xb1' + Math.round(uncertVal / 100) / 10 + ' km</div>' : '';
   const gbifId  = rec.gbifID;
   const link    = gbifId ? '<div style="margin-top:4px;"><a href="https://www.gbif.org/occurrence/' + gbifId + '" target="_blank" rel="noopener" style="color:#2a7a58;font-size:12px;">View on GBIF \u2197</a></div>' : '';
   const photoId = 'gbif-photo-' + (gbifId || Math.random().toString(36).slice(2));
   return {
     html: '<div id="' + photoId + '" style="margin-bottom:8px;"></div>' +
-          primary + cls + date + source + uncert + geoWarn + link,
+          primary + cls + date + source + uncert + link,
     photoId,
     taxonKey: rec.taxonKey,
     scientificName: rec.scientificName || ''
@@ -1200,10 +1199,16 @@ function makeMarker(stackedRecords) {
   const fillColour = groups.length === 1 ? getTaxonColour(rep) : '#6B7280';
   const radius = stackedRecords.length === 1 ? 6 : Math.min(11, 6 + Math.log2(stackedRecords.length));
 
+  // Records with coordinate uncertainty ≥ 1500 m (or no uncertainty value) are shown at half opacity
+  const repUncert = parseFloat(rep.coordinateUncertaintyInMeters);
+  const uncertain = !repUncert || repUncert >= 1500;
+  const baseFillOpacity = uncertain ? 0.5 : 0.85;
+
   const marker = L.circleMarker([lat, lng], {
     radius, fillColor: fillColour, color: '#fff',
-    weight: stackedRecords.length > 1 ? 2 : 1, fillOpacity: 0.85
+    weight: stackedRecords.length > 1 ? 2 : 1, fillOpacity: baseFillOpacity
   });
+  marker._baseFillOpacity = baseFillOpacity;
 
   marker.bindPopup(makeStackedPopup(stackedRecords));
   marker._groups       = new Set(groups);
@@ -1281,7 +1286,7 @@ function clearSpeciesHighlight() {
   allMarkers.forEach(({ marker }) => {
     if (seen.has(marker)) return; seen.add(marker);
     const baseRadius = marker._stackSize > 1 ? Math.min(11, 6 + Math.log2(marker._stackSize)) : 6;
-    marker.setStyle({ fillOpacity: 0.85, opacity: 1, radius: baseRadius });
+    marker.setStyle({ fillOpacity: marker._baseFillOpacity ?? 0.85, opacity: 1, radius: baseRadius });
   });
 }
 function selectSpecies(name) {
@@ -1655,16 +1660,13 @@ runBtn.addEventListener('click', async () => {
 function showQualityFlags(records) {
   const total = records.length;
   if (total === 0) return;
-  const noCoord    = records.filter(r => r.decimalLatitude == null || r.decimalLongitude == null).length;
-  const geoIssue   = records.filter(r => r.hasGeospatialIssues === 'true').length;
-  const highUncert = records.filter(r => parseFloat(r.coordinateUncertaintyInMeters) > 1000).length;
-  function fmtQ(el, n) {
-    el.textContent = n === 0 ? '0' : n.toLocaleString() + ' (' + Math.round(100*n/total) + '%)';
-    el.className = 'quality-val' + (n > 0 ? ' quality-flag-warn' : '');
-  }
-  fmtQ(document.getElementById('qNoCoord'),    noCoord);
-  fmtQ(document.getElementById('qGeoIssue'),   geoIssue);
-  fmtQ(document.getElementById('qHighUncert'), highUncert);
+  const highUncert = records.filter(r => {
+    const u = parseFloat(r.coordinateUncertaintyInMeters);
+    return !u || u >= 1500;
+  }).length;
+  const el = document.getElementById('qHighUncert');
+  el.textContent = highUncert === 0 ? '0' : highUncert.toLocaleString() + ' (' + Math.round(100 * highUncert / total) + '%)';
+  el.className = 'quality-val' + (highUncert > 0 ? ' quality-flag-warn' : '');
   document.getElementById('qualityBox').style.display = 'block';
 }
 
