@@ -1644,7 +1644,22 @@ runBtn.addEventListener('click', async () => {
           throw new Error('HTTP ' + res.status + ': ' + txt.substring(0, 200));
         }
         const json = await res.json();
-        if (totalCount === null) totalCount = json.count;
+        if (totalCount === null) {
+          totalCount = json.count;
+          // Warn early so user knows what they're in for
+          if (totalCount > 30000) {
+            setStatus(
+              '⚠️ ' + totalCount.toLocaleString() + ' records found — this is a very large query and may fail. ' +
+              'If it does: draw a smaller polygon, select specific taxa, or use a shorter year range.',
+              'warning'
+            );
+          } else if (totalCount > 10000) {
+            setStatus(
+              totalCount.toLocaleString() + ' records found — this may take a minute.',
+              'info'
+            );
+          }
+        }
 
         json.results.forEach(r => {
           allFetched.push({
@@ -1684,10 +1699,23 @@ runBtn.addEventListener('click', async () => {
         setProgress(10 + Math.round((fetched / Math.max(totalCount || 1, 1)) * 82),
           'Fetching records' + polyLabel + '... ' + fetched.toLocaleString() + ' / ' + (totalCount || '?').toLocaleString());
 
-        if (json.endOfRecords || offset + 300 >= 99700) break;
+        if (json.endOfRecords) break;
+        if (offset + 300 >= 99700) {
+          setStatus(
+            '⚠️ Results capped at 100,000 records (GBIF API limit). ' +
+            'Use a smaller polygon, specific taxa, or narrower year range to get all records.',
+            'warning'
+          );
+          break;
+        }
         offset += 300;
       } catch(e) {
-        setStatus('Could not fetch records: ' + e.message, 'error');
+        const n = totalCount ? totalCount.toLocaleString() + ' records ' : 'This query ';
+        setStatus(
+          n + 'was too large to load. To succeed: ' +
+          '① draw a smaller polygon  ② select specific taxa  ③ use a shorter year range',
+          'error'
+        );
         runBtn.disabled = false; return;
       }
     }
