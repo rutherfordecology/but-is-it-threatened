@@ -956,17 +956,19 @@ async function lookupCommonNames(records) {
   });
 
   // 4. Backfill: API name first (reliable language/country metadata), majority vote as fallback.
-  //    Clear any leftover banding codes or non-ASCII names that neither source replaced.
+  //    Always run the cleanup pass so banding codes and non-ASCII names are cleared even for
+  //    records that have no taxonKey (which would otherwise skip cleanup via early return).
   records.forEach(r => {
-    if (!r.taxonKey) return;
-    const apiResults = commonNameCache[r.taxonKey];
-    const apiName = Array.isArray(apiResults) ? pickVernacularName(apiResults, dominantCountry, prefLang) : '';
-    if (apiName) { r.vernacularName = apiName; return; }
-    // Fallback: majority vote among occurrence records for this region
-    const votes = nameCounts[r.taxonKey];
-    if (votes) {
-      const top = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
-      if (top) { r.vernacularName = top[0]; return; }
+    if (r.taxonKey) {
+      const apiResults = commonNameCache[r.taxonKey];
+      const apiName = Array.isArray(apiResults) ? pickVernacularName(apiResults, dominantCountry, prefLang) : '';
+      if (apiName) { r.vernacularName = apiName; return; }
+      // Fallback: majority vote among occurrence records for this region
+      const votes = nameCounts[r.taxonKey];
+      if (votes) {
+        const top = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+        if (top) { r.vernacularName = top[0]; return; }
+      }
     }
     // Clear any name that's still a banding code or (for English regions) non-ASCII
     const vn = r.vernacularName;
