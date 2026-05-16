@@ -633,7 +633,10 @@ const FISH_ORDERS = new Set([
   'polypteriformes','acipenseriformes','lepisosteiformes','amiiformes','osteoglossiformes','hiodontiformes','elopiformes','albuliformes','notacanthiformes','anguilliformes','saccopharyngiformes','clupeiformes','gonorynchiformes','cypriniformes','characiformes','gymnotiformes','siluriformes','salmoniformes','esociformes','osmeriformes','ateleopodiformes','stomiiformes','aulopiformes','myctophiformes','lampriformes','polymixiiformes','percopsiformes','batrachoidiformes','lophiiformes','gadiformes','ophidiiformes','mugiliformes','atheriniformes','beloniformes','cetomimiformes','cyprinodontiformes','stephanoberyciformes','beryciformes','zeiformes','gobiesociformes','gasterosteiformes','syngnathiformes','synbranchiformes','scorpaeniformes','perciformes','pleuronectiformes','tetraodontiformes',
   'coelacanthiformes','ceratodontiformes','lepidosireniformes',
 ]);
-const TETRAPOD_CLASSES = new Set(['Aves','Mammalia','Reptilia','Amphibia']);
+const TETRAPOD_CLASSES  = new Set(['Aves','Mammalia','Reptilia','Amphibia']);
+// Classes that must never be classified as Fish, even when order is blank.
+// Squamata is an order that GBIF sometimes writes into the class field for skinks/lizards.
+const NON_FISH_CLASSES  = new Set(['Mammalia','Aves','Reptilia','Squamata','Lepidosauria','Amphibia']);
 const CRUST_CLASSES    = new Set(['Malacostraca','Maxillopoda','Branchiopoda','Ostracoda','Cirripedia','Copepoda']);
 const ANGIO_CLASSES    = new Set(['Magnoliopsida','Liliopsida','Equisetopsida']);
 const FERN_CLASSES     = new Set(['Polypodiopsida','Marattiopsida','Psilotopsida','Equisetopsida']);
@@ -642,16 +645,25 @@ const GYMNO_CLASSES    = new Set(['Pinopsida','Cycadopsida','Gnetopsida','Ginkgo
 const ALGAE_PHYLA      = new Set(['Ochrophyta','Phaeophyta','Rhodophyta','Chlorophyta','Charophyta','Cyanobacteria','Bacillariophyta']);
 
 function getTaxonGroup(r) {
-  const cls = r.class || '';
-  const phylum = r.phylum || '';
-  const kingdom = r.kingdom || '';
+  const cls     = (r.class  || '').trim();
+  const phylum  = (r.phylum || '').trim();
+  const kingdom = (r.kingdom|| '').trim();
 
-  // Vertebrates
-  if (cls === 'Aves') return 'Aves';
-  if (cls === 'Mammalia') return 'Mammalia';
-  if (cls === 'Reptilia') return 'Reptilia';
-  if (cls === 'Amphibia') return 'Amphibia';
-  if (r.order && FISH_ORDERS.has(r.order.toLowerCase())) return 'Fish';
+  // Vertebrates — definitive class checks (must come before fish order check)
+  if (cls === 'Aves')                        return 'Aves';
+  if (cls === 'Mammalia')                    return 'Mammalia';
+  if (cls === 'Reptilia' || cls === 'Squamata' || cls === 'Lepidosauria') return 'Reptilia';
+  if (cls === 'Amphibia')                    return 'Amphibia';
+
+  // Fish: positive order whitelist only — trimmed, case-insensitive
+  const ord = (r.order || '').trim().toLowerCase();
+  if (ord && FISH_ORDERS.has(ord)) return 'Fish';
+
+  // Secondary exclusion (Issue 2): known non-fish vertebrate class with blank/non-fish order.
+  // Catches records where GBIF writes an order-level name into the class field
+  // (e.g. class='Squamata', class='Lepidosauria') — those already returned above,
+  // but this is a safety net so they can never fall through to Fish.
+  if (NON_FISH_CLASSES.has(cls)) return 'Reptilia';
 
   // Arthropod subgroups
   if (cls === 'Insecta') return 'Insecta';
