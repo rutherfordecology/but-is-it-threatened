@@ -1518,7 +1518,7 @@ runBtn.addEventListener('click', async () => {
     const poly = polygons[pi];
     const polyLabel = polygons.length > 1 ? ' (polygon ' + (pi+1) + '/' + polygons.length + ')' : '';
 
-    const baseParams = [['geometry', poly.wkt], ['hasCoordinate', 'true'], ['occurrenceStatus', 'PRESENT'], ['limit', '300']];
+    const baseParams = [['geometry', poly.wkt], ['hasCoordinate', 'true'], ['limit', '300']];
     if (dateFrom && dateTo) baseParams.push(['year', parseInt(dateFrom) + ',' + parseInt(dateTo)]);
     buildTaxonParams(taxonKeys).forEach(p => baseParams.push(p));
 
