@@ -1064,11 +1064,35 @@ async function lookupCommonNames(records) {
 // CC photo cache: taxonKey → { url, licence, photographer } or null
 const photoCache = {};
 
-async function fetchSpeciesPhoto(taxonKey) {
+// sciName → iNat taxon result cache (keyed by taxonKey)
+const inatPhotoCache = {};
+
+async function fetchSpeciesPhoto(taxonKey, sciName) {
   if (!taxonKey) return null;
   if (photoCache[taxonKey] !== undefined) return photoCache[taxonKey];
   photoCache[taxonKey] = null;
-  // Try iNaturalist occurrences first (best CC photo quality in GBIF), then fall back to all sources
+
+  // 1. Try iNaturalist Taxa API by scientific name — returns the curated default taxon photo
+  if (sciName) {
+    try {
+      const res = await fetch('https://api.inaturalist.org/v1/taxa?q=' + encodeURIComponent(sciName) + '&rank=species&per_page=1');
+      if (res.ok) {
+        const json = await res.json();
+        const taxon = (json.results || [])[0];
+        const photo = taxon && taxon.default_photo;
+        if (photo && photo.medium_url) {
+          photoCache[taxonKey] = {
+            url: photo.medium_url,
+            licence: photo.license_code || '',
+            photographer: photo.attribution || ''
+          };
+          return photoCache[taxonKey];
+        }
+      }
+    } catch(e) {}
+  }
+
+  // 2. Fall back to GBIF occurrence media
   const inatKey = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
   const attempts = [
     'https://api.gbif.org/v1/occurrence/search?taxonKey=' + taxonKey + '&mediaType=StillImage&datasetKey=' + inatKey + '&limit=5',
@@ -1149,7 +1173,7 @@ async function loadPopupPhoto(photoId, taxonKey, sciName) {
   if (!slot || slot.dataset.loaded) return;
   slot.dataset.loaded = '1';
   slot.innerHTML = '<div style="font-size:11px;color:#9b9890;padding:2px 0;">Loading photo\u2026</div>';
-  const photo = await fetchSpeciesPhoto(taxonKey);
+  const photo = await fetchSpeciesPhoto(taxonKey, sciName);
   if (!slot.isConnected) return;
   if (photo) {
     slot.innerHTML =
