@@ -1780,18 +1780,32 @@ document.getElementById('dlKmlBtn').addEventListener('click', () => {
 
 document.getElementById('dlChecklistBtn').addEventListener('click', () => {
   const filtered = allRecords.filter(passesFilters);
-  const counts = {};
+  // Aggregate per taxon group → species
+  const byGroup = {};
   filtered.forEach(r => {
+    const g   = getTaxonGroup(r);
     const key = r.species || r.scientificName || 'Unknown';
-    if (!counts[key]) counts[key] = { scientificName: key, vernacularName: '', kingdom: r.kingdom||'', phylum: r.phylum||'', class: r.class||'', order: r.order||'', family: r.family||'', genus: r.genus||'', records: 0 };
-    counts[key].records++;
-    if (!counts[key].vernacularName && r.vernacularName) counts[key].vernacularName = r.vernacularName;
+    if (!byGroup[g]) byGroup[g] = {};
+    if (!byGroup[g][key]) byGroup[g][key] = {
+      taxonGroup: (TAXON_COLOURS[g] || { label: g }).label,
+      scientificName: key, vernacularName: '',
+      kingdom: r.kingdom||'', phylum: r.phylum||'', class: r.class||'',
+      order: r.order||'', family: r.family||'', genus: r.genus||'', records: 0
+    };
+    byGroup[g][key].records++;
+    if (!byGroup[g][key].vernacularName && r.vernacularName) byGroup[g][key].vernacularName = r.vernacularName;
   });
+  const rows = [];
+  Object.keys(byGroup).sort().forEach(g =>
+    Object.values(byGroup[g]).sort((a, b) => a.scientificName.localeCompare(b.scientificName)).forEach(e => rows.push(e))
+  );
   const isMobile = window.innerWidth < 768;
-  const fields = isMobile ? ['scientificName','vernacularName','records'] : ['scientificName','vernacularName','kingdom','phylum','class','order','family','genus','records'];
+  const fields = isMobile
+    ? ['taxonGroup','scientificName','vernacularName','records']
+    : ['taxonGroup','scientificName','vernacularName','kingdom','phylum','class','order','family','genus','records'];
   const esc = v => { const s = String(v||''); return (s.includes(',') || s.includes('"')) ? '"' + s.replace(/"/g,'""') + '"' : s; };
   downloadBlob(
-    [fields.join(','), ...Object.values(counts).sort((a,b) => a.scientificName.localeCompare(b.scientificName)).map(r => fields.map(f => esc(r[f])).join(','))].join('\n'),
+    [fields.join(','), ...rows.map(r => fields.map(f => esc(r[f])).join(','))].join('\n'),
     'gbif_checklist_' + new Date().toISOString().split('T')[0] + '.csv',
     'text/csv;charset=utf-8;'
   );
