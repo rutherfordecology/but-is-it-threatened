@@ -928,7 +928,7 @@ function buildRecordPage(rec) {
   return {
     html: '<div style="display:flex;gap:10px;">' +
             '<div style="flex:1;min-width:0;">' + primary + cls + date + source + uncert + geoWarn + link + '</div>' +
-            '<div id="' + photoId + '" style="width:150px;min-width:150px;flex-shrink:0;"></div>' +
+            '<div id="' + photoId + '" style="width:300px;min-width:300px;flex-shrink:0;"></div>' +
           '</div>',
     photoId,
     taxonKey: rec.taxonKey,
@@ -946,7 +946,7 @@ async function loadPopupPhoto(photoId, taxonKey, sciName) {
   if (photo) {
     slot.innerHTML =
       '<img src="' + photo.url + '" alt="' + (sciName || '') + '" ' +
-      'style="width:100%;height:170px;object-fit:cover;border-radius:4px;display:block;" ' +
+      'style="width:100%;height:340px;object-fit:cover;border-radius:4px;display:block;" ' +
       'onerror="this.parentElement.innerHTML=\'\'"> ' +
       '<div style="font-size:9px;color:#9b9890;margin-top:2px;line-height:1.3;">' +
       licenceBadge(photo.licence) + (photo.photographer || '') + '</div>';
@@ -1068,12 +1068,12 @@ function makeStackedPopup(stackedRecords) {
           '<div id="' + popupId + '-splist" style="overflow-y:auto;max-height:120px;border-bottom:1px solid #eee;margin-bottom:6px;">' + spItems + '</div>' +
           '<div id="' + popupId + '-detail"></div>' +
         '</div>' +
-        '<div id="' + popupId + '-photo" style="width:160px;min-width:160px;flex-shrink:0;"></div>' +
+        '<div id="' + popupId + '-photo" style="width:300px;min-width:300px;flex-shrink:0;"></div>' +
       '</div>'
     );
   }
 
-  const popup = L.popup({ maxWidth: isMulti ? 460 : 380, minWidth: isMulti ? 400 : 340, autoPan: true });
+  const popup = L.popup({ maxWidth: isMulti ? 620 : 580, minWidth: isMulti ? 560 : 520, autoPan: true });
   window._gbifPopupState[popupId] = { idx: 0, sorted, popup, multiRecord: isMulti, speciesList };
 
   popup.setContent(buildShell());
