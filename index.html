@@ -893,23 +893,20 @@ function pickVernacularName(results, countryCode, prefLang) {
   const cc = (countryCode || '').toUpperCase();
   const pick = (pred) => results.find(v => v.vernacularName && pred(v));
 
-  // 1. Country match, preferred first (skip if no country provided — empty cc would match
-  //    null-country entries in any language)
+  // 1. Country match, preferred entries only (skip if no country provided — empty cc would
+  //    match null-country entries in any language)
   if (cc) {
-    const r1 = pick(v => (v.country||'').toUpperCase() === cc && v.preferred)
-             || pick(v => (v.country||'').toUpperCase() === cc);
+    const r1 = pick(v => (v.country||'').toUpperCase() === cc && v.preferred);
     if (r1) return r1.vernacularName;
   }
 
-  // 2. Preferred language, preferred flag first
-  const r2 = pick(v => normLang(v.language) === pl && v.preferred)
-           || pick(v => normLang(v.language) === pl);
+  // 2. Preferred language — preferred:true entries only to avoid obscure/mislabelled names
+  const r2 = pick(v => normLang(v.language) === pl && v.preferred);
   if (r2) return r2.vernacularName;
 
-  // 3. English fallback for non-English regions, preferred flag first
+  // 3. English fallback for non-English regions — preferred:true only
   if (pl !== 'eng') {
-    const r3 = pick(v => normLang(v.language) === 'eng' && v.preferred)
-             || pick(v => normLang(v.language) === 'eng');
+    const r3 = pick(v => normLang(v.language) === 'eng' && v.preferred);
     if (r3) return r3.vernacularName;
   }
 
@@ -954,6 +951,7 @@ async function lookupCommonNames(records) {
     const cached = r.taxonKey ? commonNameCache[r.taxonKey] : undefined;
     let apiName = Array.isArray(cached) ? pickVernacularName(cached, dominantCountry, prefLang) : '';
     if (apiName && asciiOnly && /[^\x00-\x7F]/.test(apiName)) apiName = '';
+    if (apiName && isBandingCode(apiName)) apiName = '';
     r.vernacularName = apiName || null;
   });
 }
