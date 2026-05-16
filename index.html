@@ -425,6 +425,7 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
         <button class="dl-btn" id="dlKmlBtn">&#8595; KML</button>
         <button class="dl-btn full" id="dlChecklistBtn">&#8595; Species list CSV</button>
       </div>
+      <p class="note mobile-csv-note" style="display:none;margin-top:0.5rem;">CSVs on mobile show name &amp; count only. Open on desktop for full columns.</p>
     </div>
 
     <div class="filter-section" id="filterSection">
@@ -1708,10 +1709,13 @@ function showRichness(records) {
   document.getElementById('richnessBox').style.display = 'block';
 }
 
+const CSV_FIELDS_MOBILE = ['scientificName','vernacularName','eventDate','decimalLatitude','decimalLongitude'];
+
 // Export
-function buildCSV(rows) {
+function buildCSV(rows, fields) {
+  fields = fields || CSV_FIELDS;
   const esc = v => { if (v == null) return ''; const s = String(v); return (s.includes(',') || s.includes('"') || s.includes('\n')) ? '"' + s.replace(/"/g,'""') + '"' : s; };
-  return [CSV_FIELDS.join(','), ...rows.map(r => CSV_FIELDS.map(f => esc(r[f])).join(','))].join('\n');
+  return [fields.join(','), ...rows.map(r => fields.map(f => esc(r[f])).join(','))].join('\n');
 }
 function downloadBlob(content, filename, type) {
   const blob = new Blob([content], { type }), url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -1719,7 +1723,9 @@ function downloadBlob(content, filename, type) {
 }
 
 document.getElementById('dlCsvBtn').addEventListener('click', () => {
-  if (csvData) downloadBlob(csvData, 'gbif_occurrences_' + new Date().toISOString().split('T')[0] + '.csv', 'text/csv;charset=utf-8;');
+  const filtered = allRecords.filter(passesFilters);
+  const fields = window.innerWidth < 768 ? CSV_FIELDS_MOBILE : CSV_FIELDS;
+  downloadBlob(buildCSV(filtered, fields), 'gbif_occurrences_' + new Date().toISOString().split('T')[0] + '.csv', 'text/csv;charset=utf-8;');
 });
 
 document.getElementById('dlGeoBtn').addEventListener('click', () => {
@@ -1781,7 +1787,8 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     counts[key].records++;
     if (!counts[key].vernacularName && r.vernacularName) counts[key].vernacularName = r.vernacularName;
   });
-  const fields = ['scientificName','vernacularName','kingdom','phylum','class','order','family','genus','records'];
+  const isMobile = window.innerWidth < 768;
+  const fields = isMobile ? ['scientificName','vernacularName','records'] : ['scientificName','vernacularName','kingdom','phylum','class','order','family','genus','records'];
   const esc = v => { const s = String(v||''); return (s.includes(',') || s.includes('"')) ? '"' + s.replace(/"/g,'""') + '"' : s; };
   downloadBlob(
     [fields.join(','), ...Object.values(counts).sort((a,b) => a.scientificName.localeCompare(b.scientificName)).map(r => fields.map(f => esc(r[f])).join(','))].join('\n'),
@@ -1803,10 +1810,12 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
   overlay.addEventListener('click', closeChangelog);
 })();
 
-// Show mobile warning on small screens only (phones, not tablets)
+// Show mobile warning and mobile CSV note on small screens only
 (function() {
   if (window.innerWidth < 768) {
     document.getElementById('mobileBanner').style.display = 'flex';
+    const note = document.querySelector('.mobile-csv-note');
+    if (note) note.style.display = 'block';
   }
 })();
 </script>
