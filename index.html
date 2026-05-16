@@ -1488,152 +1488,98 @@ taxonCbs().forEach(cb => {
   });
 });
 
-function buildTaxonPredicates(keys) {
-  if (keys.length === 0) return null; // no filter
-  const preds = keys.map(key => {
-    if (key === 'fish') return { type: 'and', predicates: [
-      { type: 'equals', key: 'TAXON_KEY', value: '44' },
-      { type: 'not', predicate: { type: 'in', key: 'TAXON_KEY', values: ['212','133','358','131','207','211'] }}
-    ]};
-    if (key === 'crustacea') return { type: 'in', key: 'TAXON_KEY', values: ['229','203','284','367'] };
-    if (key === 'angiosperms') return { type: 'in', key: 'TAXON_KEY', values: ['220','162846864'] };
-    if (key === 'algae') return { type: 'or', predicates: [
-      { type: 'equals', key: 'KINGDOM_KEY', value: '4' },
-      { type: 'in', key: 'TAXON_KEY', values: ['3241496','3153'] }
-    ]};
-    if (key === '1') return { type: 'and', predicates: [
-      { type: 'equals', key: 'KINGDOM_KEY', value: '1' },
-      { type: 'not', predicate: { type: 'in', key: 'TAXON_KEY', values: ['44','216','367','229','203','52','50','43','42'] }}
-    ]};
-    return { type: 'equals', key: 'TAXON_KEY', value: key };
+// Build taxon key params for the GBIF occurrence search API
+function buildTaxonParams(keys) {
+  if (keys.length === 0) return [];
+  const params = [];
+  keys.forEach(key => {
+    if (key === 'fish')           { params.push(['taxonKey', '44']); } // Chordata, post-filter to fish orders
+    else if (key === 'crustacea')   { ['229','203','284','367'].forEach(k => params.push(['taxonKey', k])); }
+    else if (key === 'angiosperms') { ['220','162846864'].forEach(k => params.push(['taxonKey', k])); }
+    else if (key === 'algae')       { ['4','3241496','3153'].forEach(k => params.push(['taxonKey', k])); }
+    else if (key === '1')           { params.push(['kingdomKey', '1']); }
+    else                            { params.push(['taxonKey', key]); }
   });
-  return preds.length === 1 ? preds[0] : { type: 'or', predicates: preds };
+  return params;
 }
 
-// GBIF download API fetch
+// GBIF live occurrence search API — returns same records as the GBIF browser (no snapshot lag)
 runBtn.addEventListener('click', async () => {
   if (polygons.length === 0) return;
   runBtn.disabled = true; clearResults();
   taxonMenu.style.display = 'none';
 
-  const dateFrom   = document.getElementById('dateFrom').value;
-  const dateTo     = document.getElementById('dateTo').value || new Date().toISOString().split('T')[0];
-  const taxonKeys  = getSelectedTaxonKeys();
+  const dateFrom  = document.getElementById('dateFrom').value;
+  const dateTo    = document.getElementById('dateTo').value || String(new Date().getFullYear());
+  const taxonKeys = getSelectedTaxonKeys();
   const allFetched = [];
 
   for (let pi = 0; pi < polygons.length; pi++) {
     const poly = polygons[pi];
     const polyLabel = polygons.length > 1 ? ' (polygon ' + (pi+1) + '/' + polygons.length + ')' : '';
-    setStatus('Submitting download request to GBIF' + polyLabel + '...', 'info');
-    setProgress(5, 'Submitting request...');
 
-    // Build predicate
-    const predicates = [
-      { type: 'within', geometry: poly.wkt }
-    ];
-    if (dateFrom && dateTo) predicates.push({ type: 'and', predicates: [
-      { type: 'greaterThanOrEquals', key: 'YEAR', value: String(parseInt(dateFrom)) },
-      { type: 'lessThanOrEquals',    key: 'YEAR', value: String(parseInt(dateTo)) }
-    ]});
-    const taxonPred = buildTaxonPredicates(taxonKeys);
-    if (taxonPred) predicates.push(taxonPred);
+    const baseParams = [['geometry', poly.wkt], ['hasCoordinate', 'true'], ['occurrenceStatus', 'PRESENT'], ['limit', '300']];
+    if (dateFrom && dateTo) baseParams.push(['year', parseInt(dateFrom) + ',' + parseInt(dateTo)]);
+    buildTaxonParams(taxonKeys).forEach(p => baseParams.push(p));
 
-    const body = {
-      creator: GBIF_USER,
-      notificationAddresses: [GBIF_EMAIL],
-      sendNotification: false,
-      format: 'SIMPLE_CSV',
-      predicate: predicates.length === 1 ? predicates[0] : { type: 'and', predicates }
-    };
+    setStatus('Fetching records from GBIF' + polyLabel + '...', 'info');
+    setProgress(5, 'Contacting GBIF...');
 
-    let downloadKey;
-    try {
-      const res = await fetch('https://api.gbif.org/v1/occurrence/download/request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Basic ' + btoa(GBIF_USER + ':' + GBIF_PASS)
-        },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        if (res.status === 400) { setStatus('GBIF rejected the polygon — may be too complex. Try simplifying in QGIS.', 'error'); runBtn.disabled = false; return; }
-        if (res.status === 401) { setStatus('GBIF authentication failed. Check credentials.', 'error'); runBtn.disabled = false; return; }
-        throw new Error('HTTP ' + res.status + ': ' + text);
-      }
-      downloadKey = await res.text();
-      downloadKey = downloadKey.replace(/"/g, '').trim();
-      window._lastDownloadKey = downloadKey;
-    } catch(e) {
-      if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError') || e.message.includes('CORS')) {
-        setStatus('Browser security is blocking the authenticated request. Please use the tool from a hosted URL (Netlify), not a local file.', 'error');
-      } else {
-        setStatus('Could not submit download request: ' + e.message, 'error');
-      }
-      runBtn.disabled = false; return;
-    }
-
-    // Poll until ready
-    setStatus('Download submitted — GBIF is preparing your data. This usually takes 30 seconds to 2 minutes, but may be longer for large areas. Everything is working fine.', 'info');
-    let elapsed = 0, status = 'PREPARING';
-    while (status !== 'SUCCEEDED' && status !== 'FAILED' && status !== 'KILLED' && status !== 'CANCELLED') {
-      await new Promise(r => setTimeout(r, 4000));
-      elapsed += 4;
+    let offset = 0, totalCount = null;
+    while (true) {
+      const qs = [...baseParams, ['offset', String(offset)]].map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
       try {
-        const res = await fetch('https://api.gbif.org/v1/occurrence/download/' + downloadKey);
-        const json = await res.json();
-        status = json.status;
-        const totalRecords = json.totalRecords != null ? ' · ' + json.totalRecords.toLocaleString() + ' records found' : '';
-        if (status === 'SUCCEEDED') {
-          const totalRecords = json.totalRecords != null ? ' · ' + json.totalRecords.toLocaleString() + ' records' : '';
-          const downloadUrl = json.downloadLink;
-          const proxyUrl = 'https://gbif-proxy.rutherfordecology.workers.dev/?url=' + encodeURIComponent(downloadUrl);
-          setProgress(52, 'Downloading via proxy...');
-          const zipRes = await fetch(proxyUrl);
-          if (!zipRes.ok) {
-            const errText = await zipRes.text();
-            throw new Error('Download failed: HTTP ' + zipRes.status + ' — ' + errText);
-          }
-          const zipBlob = await zipRes.blob();
-          setProgress(65, 'Unzipping...');
-          const zip = await JSZip.loadAsync(zipBlob);
-          const csvFile = Object.values(zip.files).find(f =>
-            f.name.endsWith('.csv') || f.name.endsWith('.tsv') ||
-            f.name.endsWith('.txt') || f.name === 'occurrence.txt'
-          );
-          if (!csvFile) throw new Error('No data file found in zip. Files: ' + Object.keys(zip.files).join(', '));
-          const text = await csvFile.async('string');
-          setProgress(75, 'Parsing records...');
-          const lines = text.split('\n').filter(l => l.trim());
-          const headers = lines[0].split('\t').map(h => h.trim().replace(/"/g,''));
-          const records = [];
-          for (let i = 1; i < lines.length; i++) {
-            const vals = lines[i].split('\t');
-            const rec = {};
-            headers.forEach((h, idx) => {
-              const v = (vals[idx] || '').replace(/^"|"$/g, '').trim();
-              rec[h] = v === '' ? null : v;
-            });
-            rec.gbifID           = rec.gbifID || rec.gbifid;
-            rec.scientificName   = rec.scientificName || rec.species;
-            rec.decimalLatitude  = parseFloat(rec.decimalLatitude) || null;
-            rec.decimalLongitude = parseFloat(rec.decimalLongitude) || null;
-            rec.taxonKey         = rec.taxonKey || rec.speciesKey;
-            rec._polyId          = poly.id;
-            rec._polyLabel       = poly.label;
-            if (rec.decimalLatitude || rec.scientificName) records.push(rec);
-          }
-          allFetched.push(...records);
-        } else if (status === 'FAILED' || status === 'KILLED' || status === 'CANCELLED') {
-          setStatus('GBIF download ' + status.toLowerCase() + '. Please try again.', 'error');
-          runBtn.disabled = false; return;
-        } else {
-          const pct = 10 + Math.min(35, Math.round(elapsed / 2));
-          setProgress(pct, 'GBIF status: ' + status + ' · ' + elapsed + 's elapsed');
+        const res = await fetch('https://api.gbif.org/v1/occurrence/search?' + qs);
+        if (!res.ok) {
+          const txt = await res.text();
+          if (res.status === 400) { setStatus('GBIF rejected the polygon — try simplifying it.', 'error'); runBtn.disabled = false; return; }
+          throw new Error('HTTP ' + res.status + ': ' + txt.substring(0, 200));
         }
+        const json = await res.json();
+        if (totalCount === null) totalCount = json.count;
+
+        json.results.forEach(r => {
+          allFetched.push({
+            gbifID:                        r.gbifID || null,
+            eventDate:                     r.eventDate || null,
+            year:                          r.year  != null ? String(r.year)  : null,
+            month:                         r.month != null ? String(r.month) : null,
+            day:                           r.day   != null ? String(r.day)   : null,
+            scientificName:                r.scientificName || null,
+            vernacularName:                r.vernacularName || null,
+            kingdom:                       r.kingdom  || null,
+            phylum:                        r.phylum   || null,
+            class:                         r.class    || null,
+            order:                         r.order    || null,
+            family:                        r.family   || null,
+            genus:                         r.genus    || null,
+            species:                       r.species  || null,
+            decimalLatitude:               r.decimalLatitude  != null ? r.decimalLatitude  : null,
+            decimalLongitude:              r.decimalLongitude != null ? r.decimalLongitude : null,
+            coordinateUncertaintyInMeters: r.coordinateUncertaintyInMeters != null ? String(r.coordinateUncertaintyInMeters) : null,
+            hasGeospatialIssues:           r.hasGeospatialIssues != null ? String(r.hasGeospatialIssues) : null,
+            basisOfRecord:                 r.basisOfRecord || null,
+            occurrenceID:                  r.occurrenceID  || null,
+            taxonKey:                      r.taxonKey || r.speciesKey || null,
+            datasetName:                   r.datasetName   || null,
+            country:                       r.country       || null,
+            countryCode:                   r.countryCode   || null,
+            stateProvince:                 r.stateProvince || null,
+            locality:                      r.locality      || null,
+            recordedBy:                    Array.isArray(r.recordedBy) ? r.recordedBy.join('; ') : (r.recordedBy || null),
+            _polyId:    poly.id,
+            _polyLabel: poly.label
+          });
+        });
+
+        const fetched = Math.min(offset + 300, totalCount || 0);
+        setProgress(10 + Math.round((fetched / Math.max(totalCount || 1, 1)) * 82),
+          'Fetching records' + polyLabel + '... ' + fetched.toLocaleString() + ' / ' + (totalCount || '?').toLocaleString());
+
+        if (json.endOfRecords || offset + 300 >= 99700) break;
+        offset += 300;
       } catch(e) {
-        setStatus('Error checking download status: ' + e.message, 'error');
+        setStatus('Could not fetch records: ' + e.message, 'error');
         runBtn.disabled = false; return;
       }
     }
