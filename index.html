@@ -893,10 +893,13 @@ function pickVernacularName(results, countryCode, prefLang) {
   const cc = (countryCode || '').toUpperCase();
   const pick = (pred) => results.find(v => v.vernacularName && pred(v));
 
-  // 1. Country match, preferred first
-  const r1 = pick(v => (v.country||'').toUpperCase() === cc && v.preferred)
-           || pick(v => (v.country||'').toUpperCase() === cc);
-  if (r1) return r1.vernacularName;
+  // 1. Country match, preferred first (skip if no country provided — empty cc would match
+  //    null-country entries in any language)
+  if (cc) {
+    const r1 = pick(v => (v.country||'').toUpperCase() === cc && v.preferred)
+             || pick(v => (v.country||'').toUpperCase() === cc);
+    if (r1) return r1.vernacularName;
+  }
 
   // 2. Preferred language, preferred flag first
   const r2 = pick(v => normLang(v.language) === pl && v.preferred)
@@ -944,9 +947,13 @@ async function lookupCommonNames(records) {
   // 3. Overwrite every record's vernacularName with the API result (or null).
   //    Never trust the original value from the occurrence download — dataset publishers
   //    use whatever language they like, producing foreign names for NZ/English searches.
+  //    For English regions, also reject any API name that contains non-ASCII characters —
+  //    GBIF occasionally mislabels language codes so Greek/Cyrillic names slip through.
+  const asciiOnly = prefLang === 'eng';
   records.forEach(r => {
     const cached = r.taxonKey ? commonNameCache[r.taxonKey] : undefined;
-    const apiName = Array.isArray(cached) ? pickVernacularName(cached, dominantCountry, prefLang) : '';
+    let apiName = Array.isArray(cached) ? pickVernacularName(cached, dominantCountry, prefLang) : '';
+    if (apiName && asciiOnly && /[^\x00-\x7F]/.test(apiName)) apiName = '';
     r.vernacularName = apiName || null;
   });
 }
