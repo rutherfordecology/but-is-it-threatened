@@ -320,7 +320,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.16</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.17</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1607,17 +1607,19 @@ function buildFilterChips(records) {
     const chip   = document.createElement('div'); chip.className = 'chip'; chip.dataset.group = g;
     chip.textContent = label + ' (' + groups[g] + ')';
     chip.style.cssText = 'background:' + colour + '33;border-color:' + colour + ';color:' + colour;
-    chip.title = 'Click to isolate; click again to show all';
+    chip.title = 'Click to toggle this group on/off';
     activeFilters.add(g);
     chipMap[g] = chip;
 
+    let _lastChipFire = 0;
     function handleChipToggle(e) {
       e.preventDefault();
-      const activeCount = allGroupKeys.filter(k => activeFilters.has(k)).length;
-      if (activeCount === 1 && activeFilters.has(g)) {
-        allGroupKeys.forEach(k => activeFilters.add(k));
+      const now = Date.now();
+      if (now - _lastChipFire < 300) return;
+      _lastChipFire = now;
+      if (activeFilters.has(g)) {
+        activeFilters.delete(g);
       } else {
-        allGroupKeys.forEach(k => activeFilters.delete(k));
         activeFilters.add(g);
       }
       refreshChips();
