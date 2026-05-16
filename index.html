@@ -314,7 +314,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 <header>
   <div class="header-brand">
     <h1><a href="https://sites.google.com/view/rutherford-ecology/?read_current=1" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.04</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
+    <span style="font-size:15px;font-weight:600;color:rgba(255,255,255,0.85);">GBIF Record Finder</span> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);letter-spacing:0.04em;">v1.05</span><img src="logo.png" alt="GBIF Record Finder logo" style="height:46px;width:auto;margin-left:4px;filter:brightness(0) invert(1);opacity:0.9;">
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -745,7 +745,7 @@ const FISH_ORDERS = new Set([
 const TETRAPOD_CLASSES  = new Set(['Aves','Mammalia','Reptilia','Amphibia']);
 // Classes that must never be classified as Fish, even when order is blank.
 // Squamata is an order that GBIF sometimes writes into the class field for skinks/lizards.
-const NON_FISH_CLASSES  = new Set(['Mammalia','Aves','Reptilia','Squamata','Lepidosauria','Amphibia']);
+const NON_FISH_CLASSES  = new Set(['Mammalia','Aves','Reptilia','Squamata','Lepidosauria','Amphibia','Testudines','Crocodylia','Rhynchocephalia','Archelosauria']);
 const CRUST_CLASSES    = new Set(['Malacostraca','Maxillopoda','Branchiopoda','Ostracoda','Cirripedia','Copepoda']);
 const ANGIO_CLASSES    = new Set(['Magnoliopsida','Liliopsida','Equisetopsida']);
 const FERN_CLASSES     = new Set(['Polypodiopsida','Marattiopsida','Psilotopsida','Equisetopsida']);
@@ -761,17 +761,20 @@ function getTaxonGroup(r) {
   // Vertebrates — definitive class checks (must come before fish order check)
   if (cls === 'Aves')                        return 'Aves';
   if (cls === 'Mammalia')                    return 'Mammalia';
-  if (cls === 'Reptilia' || cls === 'Squamata' || cls === 'Lepidosauria') return 'Reptilia';
+  if (cls === 'Reptilia' || cls === 'Squamata' || cls === 'Lepidosauria' ||
+      cls === 'Testudines' || cls === 'Crocodylia' || cls === 'Rhynchocephalia' ||
+      cls === 'Archelosauria') return 'Reptilia';
   if (cls === 'Amphibia')                    return 'Amphibia';
 
   // Fish: positive order whitelist only — trimmed, case-insensitive
   const ord = (r.order || '').trim().toLowerCase();
   if (ord && FISH_ORDERS.has(ord)) return 'Fish';
 
-  // Secondary exclusion (Issue 2): known non-fish vertebrate class with blank/non-fish order.
-  // Catches records where GBIF writes an order-level name into the class field
-  // (e.g. class='Squamata', class='Lepidosauria') — those already returned above,
-  // but this is a safety net so they can never fall through to Fish.
+  // Order-based reptile fallback for records where class field is non-standard or blank
+  const ordOrig = (r.order || '').trim();
+  if (['Squamata','Testudines','Crocodylia','Rhynchocephalia','Crocodilia'].includes(ordOrig) && phylum === 'Chordata') return 'Reptilia';
+
+  // Secondary exclusion: known non-fish vertebrate class — safety net so they never fall through to Fish
   if (NON_FISH_CLASSES.has(cls)) return 'Reptilia';
 
   // Arthropod subgroups
