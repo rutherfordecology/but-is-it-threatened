@@ -2,7 +2,7 @@
 
 Biodiversity occurrence records, mapped. Draw a polygon, set your filters, fetch from GBIF — no login, no install, no backend.
 
-**[Open occurd.](https://rutherfordecology.github.io/GBIF-Record-Finder/)**
+**[Open occurd.](https://rutherfordecology.github.io/occurd/)**
 
 ---
 
