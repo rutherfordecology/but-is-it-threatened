@@ -827,8 +827,47 @@ function isBandingCode(name) {
   return !!name && /^[A-Z]{1,6}$/.test(name.trim());
 }
 
+// ISO 3166-1 alpha-2 country → GBIF vernacular name language code (ISO 639-2/3)
+const COUNTRY_LANG = {
+  NZ:'eng', AU:'eng', US:'eng', GB:'eng', CA:'eng', IE:'eng', ZA:'eng',
+  FJ:'eng', WS:'eng', TO:'eng', PG:'eng', SB:'eng', VU:'eng', CK:'eng', NU:'eng',
+  FR:'fra', PF:'fra', NC:'fra', BE:'fra', CH:'fra', CI:'fra', SN:'fra',
+  DE:'deu', AT:'deu',
+  ES:'spa', MX:'spa', AR:'spa', CL:'spa', CO:'spa', PE:'spa', UY:'spa', VE:'spa', EC:'spa',
+  PT:'por', BR:'por', AO:'por', MZ:'por',
+  IT:'ita', NL:'nld', SE:'swe', NO:'nor', DK:'dan', FI:'fin',
+  JP:'jpn', CN:'zho', KR:'kor', RU:'rus', PL:'pol', CZ:'ces',
+  IN:'hin', ID:'ind', MY:'msa',
+};
+
+function matchesLang(v, lang) {
+  if (!v.language) return false;
+  if (v.language === lang) return true;
+  // Handle eng/en duality
+  if (lang === 'eng') return v.language === 'en';
+  if (lang === 'en')  return v.language === 'eng';
+  // Also try 2-letter prefix match (e.g. 'fra' matches 'fr')
+  return v.language === lang.substring(0, 2);
+}
+
 // Common name lookup
 async function lookupCommonNames(records) {
+  // 1. Majority-vote vernacular names from occurrence records (handles local preference, e.g. "Tui" > "Parson Bird")
+  const nameCounts = {}; // taxonKey → { name: count }
+  records.forEach(r => {
+    if (!r.taxonKey || !r.vernacularName || isBandingCode(r.vernacularName)) return;
+    const n = r.vernacularName.trim();
+    if (!nameCounts[r.taxonKey]) nameCounts[r.taxonKey] = {};
+    nameCounts[r.taxonKey][n] = (nameCounts[r.taxonKey][n] || 0) + 1;
+  });
+
+  // 2. Detect dominant country → preferred language for GBIF species API lookups
+  const countryCounts = {};
+  records.forEach(r => { if (r.countryCode) countryCounts[r.countryCode] = (countryCounts[r.countryCode] || 0) + 1; });
+  const dominantCountry = Object.entries(countryCounts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const prefLang = (dominantCountry && COUNTRY_LANG[dominantCountry]) || 'eng';
+
+  // 3. Fetch GBIF species vernacular names, preferring regional language then English
   const taxonKeys = [...new Set(records.map(r => r.taxonKey).filter(Boolean))];
   const total = taxonKeys.length;
   let done = 0;
@@ -842,16 +881,25 @@ async function lookupCommonNames(records) {
         if (!res.ok) { commonNameCache[key] = ''; return; }
         const json = await res.json();
         const results = json.results || [];
-        const enName = results.find(v => v.language === 'eng' || v.language === 'en');
-        const anyName = results[0];
-        commonNameCache[key] = enName ? enName.vernacularName : (anyName ? anyName.vernacularName : '');
+        const langName = results.find(v => matchesLang(v, prefLang));
+        const enName   = (prefLang !== 'eng') ? results.find(v => matchesLang(v, 'eng')) : null;
+        const anyName  = results[0];
+        commonNameCache[key] = (langName || enName || anyName)?.vernacularName || '';
       } catch(e) { commonNameCache[key] = ''; }
       done++;
     }));
     setProgress(50 + Math.round((done / total) * 45), 'Loading common names... ' + done + ' / ' + total + ' species');
   }
+
+  // 4. Backfill: prefer majority-voted occurrence name, then GBIF API name
   records.forEach(r => {
-    const apiName = r.taxonKey && commonNameCache[r.taxonKey];
+    if (!r.taxonKey) return;
+    const votes = nameCounts[r.taxonKey];
+    if (votes) {
+      const top = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+      if (top) { r.vernacularName = top[0]; return; }
+    }
+    const apiName = commonNameCache[r.taxonKey];
     if (apiName) r.vernacularName = apiName;
   });
 }
