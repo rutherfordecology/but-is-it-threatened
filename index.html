@@ -403,6 +403,7 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
       <div class="export-row" style="margin-top:0.75rem;">
         <button class="dl-btn" id="dlCsvBtn">&#8595; Occurrences CSV</button>
         <button class="dl-btn" id="dlGeoBtn">&#8595; GeoJSON</button>
+        <button class="dl-btn" id="dlKmlBtn">&#8595; KML</button>
         <button class="dl-btn full" id="dlChecklistBtn">&#8595; Species list CSV</button>
       </div>
     </div>
@@ -1734,6 +1735,43 @@ document.getElementById('dlGeoBtn').addEventListener('click', () => {
     }))
   };
   downloadBlob(JSON.stringify(geojson, null, 2), 'gbif_occurrences_' + new Date().toISOString().split('T')[0] + '.geojson', 'application/json');
+});
+
+document.getElementById('dlKmlBtn').addEventListener('click', () => {
+  const filtered = allRecords.filter(r => passesFilters(r) && r.decimalLatitude != null && r.decimalLongitude != null);
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  // Group by taxon group
+  const groups = {};
+  filtered.forEach(r => {
+    const g = getTaxonGroup(r);
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(r);
+  });
+
+  const folders = Object.keys(groups).sort().map(g => {
+    const label = (TAXON_COLOURS[g] || { label: g }).label;
+    const placemarks = groups[g].map(r => {
+      const name = esc(r.vernacularName || r.species || r.scientificName || '');
+      const sci  = esc(r.scientificName || r.species || '');
+      const date = esc(r.eventDate || '');
+      const link = r.gbifID ? 'https://www.gbif.org/occurrence/' + r.gbifID : '';
+      const desc = '<![CDATA[<b>' + sci + '</b>' + (date ? '<br>' + date : '') + (link ? '<br><a href="' + link + '">View on GBIF</a>' : '') + ']]>';
+      return '    <Placemark>\n' +
+             '      <name>' + name + '</name>\n' +
+             '      <description>' + desc + '</description>\n' +
+             '      <Point><coordinates>' + r.decimalLongitude + ',' + r.decimalLatitude + ',0</coordinates></Point>\n' +
+             '    </Placemark>';
+    }).join('\n');
+    return '  <Folder>\n    <name>' + esc(label) + '</name>\n' + placemarks + '\n  </Folder>';
+  }).join('\n');
+
+  const kml = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n' +
+    '  <name>GBIF Records ' + new Date().toISOString().split('T')[0] + '</name>\n' +
+    folders + '\n</Document>\n</kml>';
+
+  downloadBlob(kml, 'gbif_records_' + new Date().toISOString().split('T')[0] + '.kml', 'application/vnd.google-earth.kml+xml');
 });
 
 document.getElementById('dlChecklistBtn').addEventListener('click', () => {
