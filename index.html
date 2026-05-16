@@ -1154,7 +1154,7 @@ async function loadPopupPhoto(photoId, taxonKey, sciName) {
   if (photo) {
     slot.innerHTML =
       '<img src="' + photo.url + '" alt="' + (sciName || '') + '" ' +
-      'style="width:100%;height:260px;object-fit:cover;border-radius:4px;display:block;" ' +
+      'style="width:100%;height:' + (window.innerWidth < 768 ? '130px' : '260px') + ';object-fit:cover;border-radius:4px;display:block;" ' +
       'onerror="this.parentElement.innerHTML=\'\'"> ' +
       '<div style="font-size:9px;color:#9b9890;margin-top:2px;line-height:1.3;">' +
       licenceBadge(photo.licence) + (photo.photographer || '') + '</div>';
@@ -1281,7 +1281,12 @@ function makeStackedPopup(stackedRecords) {
     );
   }
 
-  const popup = L.popup({ maxWidth: isMulti ? 380 : 340, minWidth: isMulti ? 320 : 280, autoPan: true });
+  const isMob = window.innerWidth < 768;
+  const popup = L.popup({
+    maxWidth:  isMob ? Math.min(window.innerWidth - 32, 300) : (isMulti ? 380 : 340),
+    minWidth:  isMob ? 220 : (isMulti ? 320 : 280),
+    autoPan: true, keepInView: true
+  });
   window._gbifPopupState[popupId] = { idx: 0, sorted, popup, multiRecord: isMulti, speciesList };
 
   popup.setContent(buildShell());
@@ -1850,12 +1855,17 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
   overlay.addEventListener('click', closeChangelog);
 })();
 
-// Show mobile warning and mobile CSV note on small screens only
+// Show mobile warning and mobile CSV note on small screens only;
+// also move sidebar footer below the map so it sits at the page bottom
 (function() {
   if (window.innerWidth < 768) {
     document.getElementById('mobileBanner').style.display = 'flex';
     const note = document.querySelector('.mobile-csv-note');
     if (note) note.style.display = 'block';
+    // Relocate footer to after map-wrap
+    const footer = document.querySelector('.sidebar-footer');
+    const mapWrap = document.getElementById('map-wrap');
+    if (footer && mapWrap) mapWrap.insertAdjacentElement('afterend', footer);
   }
 })();
 </script>
