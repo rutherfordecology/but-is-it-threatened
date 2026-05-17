@@ -344,7 +344,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.93</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.94</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -466,10 +466,8 @@ html, body { max-width: 100vw; overflow-x: hidden; }
           <button class="tool-btn active" id="btnPoints" onclick="setViewMode('points')">Points</button>
           <button class="tool-btn" id="btnChecklist" onclick="toggleChecklist()">Species checklist</button>
         </div>
-        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin:0.5rem 0 3px;">Heatmap</div>
-        <div class="tool-row">
-          <button class="tool-btn" id="btnHeat" onclick="setViewMode('heat')">Occurrences</button>
-          <button class="tool-btn" id="btnDiversity" onclick="setViewMode('diversity')">Species</button>
+        <div class="tool-row" style="margin-top:0.4rem;">
+          <button class="tool-btn" id="btnHeat" onclick="setViewMode('heat')">Heatmap</button>
         </div>
         <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin:0.5rem 0 3px;">Downloads</div>
         <div class="export-row">
@@ -604,10 +602,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <p style="font-weight:600;color:var(--text);margin:0 0 0.25rem;">Occurrences heatmap</p>
       <p style="margin:0 0 1rem;">Records are grouped by exact coordinate. Each unique location is weighted using a log₂ scale — 1 record → 0.15, 10 records → 0.52, 100 records → 1.0 — so heavily-visited birding hotspots don't oversaturate the map relative to areas with sparser but genuine coverage.</p>
 
-      <p style="font-weight:600;color:var(--text);margin:0 0 0.25rem;">Species diversity heatmap</p>
-      <p style="margin:0 0 1rem;">The map area is divided into a grid whose cell size adapts to zoom level (from ~11 km at regional scale down to ~55 m at street level). Each cell is weighted by the number of distinct species recorded within it, normalised against the most species-rich cell in your polygon using a square-root scale — so a cell at 25% of the maximum diversity shows at 50% intensity rather than 25%. The highest-diversity cell always shows at full intensity; everything else is relative to it. This means the map reflects diversity within your study area, not against any global benchmark.</p>
-
-      <p style="font-weight:600;color:var(--text);margin:0 0 0.25rem;">Coordinate precision</p>
+<p style="font-weight:600;color:var(--text);margin:0 0 0.25rem;">Coordinate precision</p>
       <p style="margin:0 0 1rem;">Records with a reported coordinate uncertainty ≥ 1,500 m are shown at reduced opacity. Many museum specimens and older survey records carry uncertainties of several kilometres — they're included but visually distinguished so they don't mislead fine-scale analysis.</p>
 
       <p style="font-weight:600;color:var(--text);margin:0 0 0.25rem;">Taxon classification</p>
@@ -1925,93 +1920,22 @@ function _occurrenceApplyLayer() {
   if (!_occurrenceHeatPts) return;
   if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
   const { radius, blur } = _occurrencePixelRadius(_occurrenceGeoRad);
-  heatLayer = L.heatLayer(_occurrenceHeatPts, { radius, blur, maxZoom: 19, minOpacity: 0.05, max: 0.22,
-    gradient: { 0.0: 'blue', 0.35: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red' } });
-  map.addLayer(heatLayer);
-}
-
-// Cell size and heat points are computed once per fetch (based on polygon extent).
-// Only the pixel radius is updated on zoom — the grid never recomputes.
-let _diversityCellDeg  = null;
-let _diversityHeatPts  = null;
-
-function _diversityCellFromExtent() {
-  const bounds = polyLayer.getBounds();
-  if (!bounds.isValid()) return 0.005;
-  const shorter = Math.min(
-    bounds.getNorth() - bounds.getSouth(),
-    bounds.getEast()  - bounds.getWest()
-  );
-  // ~60 cells across the shorter polygon dimension; clamp to sensible range
-  return Math.min(0.1, Math.max(0.0002, shorter / 60));
-}
-
-function _diversityPixelRadius(cellDeg) {
-  const pxPerDeg = Math.pow(2, map.getZoom()) * 256 / 360;
-  const cellPx   = cellDeg * pxPerDeg;
-  return {
-    radius: Math.max(8,  Math.round(cellPx * 0.6)),
-    blur:   Math.max(4,  Math.round(cellPx * 0.38))
-  };
-}
-
-function renderDiversityHeatmap(records) {
-  if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
-  if (heatLayer)    { map.removeLayer(heatLayer);    heatLayer = null; }
-
-  const filtered = records.filter(r => passesFilters(r) && r.decimalLatitude != null);
-  const heatCenterLng = map.getCenter().lng;
-
-  // Compute cell grid from polygon extent — only on a full re-render
-  _diversityCellDeg = _diversityCellFromExtent();
-  const cs = _diversityCellDeg;
-
-  // Count unique species per grid cell
-  const cells = {};
-  filtered.forEach(r => {
-    let hLng = r.decimalLongitude;
-    while (hLng < heatCenterLng - 180) hLng += 360;
-    while (hLng > heatCenterLng + 180) hLng -= 360;
-    const cellLat = Math.round(r.decimalLatitude / cs) * cs;
-    const cellLng = Math.round(hLng / cs) * cs;
-    const key = cellLat.toFixed(7) + ',' + cellLng.toFixed(7);
-    if (!cells[key]) cells[key] = { lat: cellLat, lng: cellLng, species: new Set() };
-    const sp = r.species || r.scientificName || '';
-    if (sp) cells[key].species.add(sp);
-  });
-
-  const values = Object.values(cells);
-  const maxSp  = Math.max(...values.map(c => c.species.size), 1);
-  _diversityHeatPts = values.map(c => [c.lat, c.lng, Math.sqrt(c.species.size / maxSp)]);
-
-  _diversityApplyLayer();
-  document.getElementById('mShown').textContent = filtered.length.toLocaleString();
-  csvData = buildCSV(filtered);
-}
-
-function _diversityApplyLayer() {
-  if (!_diversityHeatPts) return;
-  if (heatLayer) { map.removeLayer(heatLayer); heatLayer = null; }
-  const { radius, blur } = _diversityPixelRadius(_diversityCellDeg);
-  heatLayer = L.heatLayer(_diversityHeatPts, { radius, blur, maxZoom: 19, minOpacity: 0, max: 0.1,
+  heatLayer = L.heatLayer(_occurrenceHeatPts, { radius, blur, maxZoom: 19, minOpacity: 0.05, max: 0.28,
     gradient: { 0.0: 'blue', 0.35: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red' } });
   map.addLayer(heatLayer);
 }
 
 // On zoom: update pixel radius to match fixed geographic size — don't recompute data
 map.on('zoomend', function() {
-  if (viewMode === 'diversity'  && _diversityHeatPts)  _diversityApplyLayer();
-  if (viewMode === 'heat'       && _occurrenceHeatPts) _occurrenceApplyLayer();
+  if (viewMode === 'heat' && _occurrenceHeatPts) _occurrenceApplyLayer();
 });
 
 function setViewMode(mode) {
   viewMode = mode;
   document.getElementById('btnPoints').classList.toggle('active', mode === 'points');
   document.getElementById('btnHeat').classList.toggle('active', mode === 'heat');
-  document.getElementById('btnDiversity').classList.toggle('active', mode === 'diversity');
   if (allRecords.length === 0) return;
   if (mode === 'points') renderPoints(allRecords);
-  else if (mode === 'diversity') renderDiversityHeatmap(allRecords);
   else renderHeatmap(allRecords);
 }
 
@@ -2139,7 +2063,6 @@ function buildFilterChips(records) {
       if (chipMap[k]) chipMap[k].classList.toggle('off', !activeFilters.has(k));
     });
     if (viewMode === 'points') renderPoints(allRecords);
-    else if (viewMode === 'diversity') renderDiversityHeatmap(allRecords);
     else renderHeatmap(allRecords);
     filterChecklistByTaxon();
     syncSelectAllBtn();
