@@ -366,7 +366,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.26</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.27</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1330,30 +1330,73 @@ function latlngsToWKT(latlngs) {
     prevLng = lng;
     coords.push([parseFloat(lng.toFixed(6)), parseFloat(lat.toFixed(6))]);
   }
-  // If any longitude ended up < -180 (happens when the first vertex was just
-  // east of the antimeridian and got snapped to ~-179, pulling later vertices
-  // to -181 etc.), shift the whole ring by +360 so the antimeridian crossing
-  // is expressed with positive-extended longitudes (e.g. 181) which GBIF accepts.
-  // GBIF documents positive extended longitudes but not negative ones.
+  // Shift negative-extended longitudes (+360) so crossing is expressed with
+  // positive-extended values (e.g. 181) which GBIF accepts.
   if (coords.some(c => c[0] < -180)) coords.forEach(c => { c[0] += 360; });
 
-  // Close ring
-  const first = coords[0], last = coords[coords.length - 1];
-  if (first[0] !== last[0] || first[1] !== last[1]) coords.push(first.slice());
-  // Ensure counter-clockwise winding (GBIF / GeoJSON right-hand rule).
-  // IMPORTANT: when the ring has positive-extended longitudes (> 180) GBIF
-  // normalises them back to [−180, 180] before running its own winding check.
-  // That normalisation can flip the apparent orientation, so we must compute
-  // our winding-order test on the same normalised view that GBIF will see.
-  const wCoords = coords.some(c => c[0] > 180)
-    ? coords.map(c => [c[0] > 180 ? c[0] - 360 : c[0], c[1]])
-    : coords;
-  let area = 0;
-  for (let i = 0; i < wCoords.length - 1; i++) {
-    area += (wCoords[i+1][0] - wCoords[i][0]) * (wCoords[i+1][1] + wCoords[i][1]);
+  // ── Winding-order helper ────────────────────────────────────────────────
+  // GBIF normalises any coord > 180 back to [-180, 180] before its winding
+  // check (via JTS CGAlgorithms.isCCW).  When a ring has vertices on BOTH
+  // sides of the antimeridian, that normalisation produces a ~360° longitude
+  // jump which makes any shoelace/cross-product calculation give garbage.
+  // Fix: split the ring at the antimeridian into two sub-polygons, each
+  // entirely on one side, then check winding on each independently.
+  // The intersection vertices are placed at 180−ε (left) and 180+ε (right)
+  // so the right sub-polygon is fully > 180 and can be normalised cleanly.
+
+  // Trapezoid signed area on (already-normalised) ring. Positive → CW.
+  function signedArea(ring) {
+    // Right sub-polygon: all coords > 180 — normalise by subtracting 360.
+    const r = ring.every(c => c[0] > 180)
+      ? ring.map(c => [c[0] - 360, c[1]])
+      : ring;
+    let a = 0;
+    for (let i = 0; i < r.length - 1; i++)
+      a += (r[i+1][0] - r[i][0]) * (r[i+1][1] + r[i][1]);
+    return a;
   }
-  if (area > 0) coords.reverse();
-  return 'POLYGON((' + coords.map(c => c[0] + ' ' + c[1]).join(',') + '))';
+
+  // Close an open ring, ensure CCW, return WKT ring fragment "(( … ))".
+  function ringWKT(ring) {
+    const r = [...ring, ring[0]];
+    if (signedArea(r) > 0) r.reverse();
+    return '((' + r.map(c => c[0] + ' ' + c[1]).join(',') + '))';
+  }
+
+  // No antimeridian crossing — simple polygon.
+  if (!coords.some(c => c[0] > 180)) {
+    return 'POLYGON' + ringWKT(coords);
+  }
+
+  // Antimeridian crossing: split into left (≤ 180) and right (> 180) rings.
+  const EPS = 1e-6;
+  const leftRing = [], rightRing = [];
+  const n = coords.length;
+
+  for (let i = 0; i < n; i++) {
+    const p = coords[i];
+    const q = coords[(i + 1) % n];
+    const pLeft = p[0] <= 180;
+    const qLeft = q[0] <= 180;
+
+    if (pLeft) leftRing.push([...p]);
+    else       rightRing.push([...p]);
+
+    if (pLeft !== qLeft) {
+      // Edge crosses antimeridian — compute intersection latitude
+      const t   = (180 - p[0]) / (q[0] - p[0]);
+      const lat = parseFloat((p[1] + t * (q[1] - p[1])).toFixed(6));
+      leftRing.push( [parseFloat((180 - EPS).toFixed(6)), lat]);
+      rightRing.push([parseFloat((180 + EPS).toFixed(6)), lat]);
+    }
+  }
+
+  // Fallback: if split produced degenerate rings, send the polygon as-is
+  if (leftRing.length < 3 || rightRing.length < 3) {
+    return 'POLYGON' + ringWKT(coords);
+  }
+
+  return 'MULTIPOLYGON(' + ringWKT(leftRing) + ',' + ringWKT(rightRing) + ')';
 }
 
 function addPolygon(latlngs, label) {
@@ -3039,10 +3082,10 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
   </div>
   <div class="changelog-scroll" id="changelogScroll">
     <div class="changelog-version">
-      <span class="changelog-version-tag">v2.26</span>
+      <span class="changelog-version-tag">v2.27</span>
       <span class="changelog-date">May 2026</span>
       <ul>
-        <li>Fixed antimeridian polygon winding order — GBIF normalises extended longitudes before checking orientation, so the winding check now uses the same normalised view GBIF sees</li>
+        <li>Fixed antimeridian polygon queries — polygons crossing the 180° line are now split into two sub-polygons and sent as MULTIPOLYGON, avoiding GBIF's winding-order check failures for cross-antimeridian geometry</li>
       </ul>
     </div>
     <div class="changelog-version">
