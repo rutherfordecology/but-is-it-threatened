@@ -344,7 +344,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.81</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.82</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1910,11 +1910,15 @@ function diversityCellSize() {
 }
 
 function diversityHeatRadius() {
-  const z = map.getZoom();
-  if (z <= 11) return { radius: 30, blur: 22 };
-  if (z <= 13) return { radius: 22, blur: 18 };
-  if (z <= 15) return { radius: 16, blur: 13 };
-  return { radius: 12, blur: 10 };
+  // Compute radius from actual cell pixel width so cells always overlap cleanly.
+  const z        = map.getZoom();
+  const cs       = diversityCellSize();
+  const pxPerDeg = Math.pow(2, z) * 256 / 360;
+  const cellPx   = cs * pxPerDeg;
+  return {
+    radius: Math.max(14, Math.round(cellPx * 0.72)),
+    blur:   Math.max(10, Math.round(cellPx * 0.52))
+  };
 }
 
 function renderDiversityHeatmap(records) {
@@ -1949,7 +1953,10 @@ function renderDiversityHeatmap(records) {
   );
 
   const { radius, blur } = diversityHeatRadius();
-  heatLayer = L.heatLayer(heatPoints, { radius, blur, maxZoom: 19, minOpacity: 0.12 });
+  heatLayer = L.heatLayer(heatPoints, {
+    radius, blur, maxZoom: 19, minOpacity: 0.18,
+    gradient: { 0.0: '#c8e6c9', 0.35: '#6dba9a', 0.65: '#2a7a58', 1.0: '#1a3d2b' }
+  });
   map.addLayer(heatLayer);
   document.getElementById('mShown').textContent = filtered.length.toLocaleString();
   csvData = buildCSV(filtered);
