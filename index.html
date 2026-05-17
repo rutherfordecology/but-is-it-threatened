@@ -344,7 +344,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.90</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.91</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1901,21 +1901,21 @@ function renderHeatmap(records) {
 
 function diversityCellSize() {
   const z = map.getZoom();
-  if (z <= 8)  return 0.1;     // ~11 km
-  if (z <= 11) return 0.05;    // ~5.5 km
-  if (z <= 13) return 0.01;    // ~1.1 km
-  if (z <= 14) return 0.005;   // ~550 m
-  if (z <= 15) return 0.002;   // ~220 m
-  if (z <= 16) return 0.001;   // ~110 m
-  return 0.0005;               // ~55 m
+  if (z <= 8)  return 0.05;    // ~5.5 km
+  if (z <= 11) return 0.02;    // ~2.2 km
+  if (z <= 13) return 0.005;   // ~550 m
+  if (z <= 14) return 0.002;   // ~220 m
+  if (z <= 15) return 0.001;   // ~110 m
+  if (z <= 16) return 0.0005;  // ~55 m
+  return 0.0002;               // ~22 m
 }
 
 function diversityHeatRadius() {
   const z = map.getZoom();
-  if (z <= 11) return { radius: 42, blur: 18 };
-  if (z <= 14) return { radius: 32, blur: 15 };
-  if (z <= 16) return { radius: 26, blur: 12 };
-  return { radius: 20, blur: 10 };
+  if (z <= 11) return { radius: 22, blur: 10 };
+  if (z <= 14) return { radius: 16, blur: 8 };
+  if (z <= 16) return { radius: 13, blur: 6 };
+  return { radius: 10, blur: 5 };
 }
 
 function renderDiversityHeatmap(records) {
