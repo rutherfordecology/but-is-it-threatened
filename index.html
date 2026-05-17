@@ -366,7 +366,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.16</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.17</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -773,6 +773,8 @@ const cancelDrawBtn = document.getElementById('cancelDrawBtn');
 let activeDrawHandler = null;
 
 map.on(L.Draw.Event.DRAWSTART, e => {
+  // Lock any polygon waiting in edit mode before starting a new draw
+  if (typeof finalizePendingEdit === 'function') finalizePendingEdit();
   // e.handler is the Leaflet.draw polygon handler; fall back to direct lookup if missing
   activeDrawHandler = e.handler ||
     (drawControl._toolbars && drawControl._toolbars.draw &&
@@ -919,9 +921,17 @@ cancelDrawBtn.addEventListener('click', onCancelDraw);
   });
 })();
 
-map.on(L.Draw.Event.CREATED, e => {
-  const raw = e.layer.getLatLngs();
+// Polygon edit-before-fetch: after drawing, the polygon stays editable
+// (vertex handles visible) until Fetch is clicked or a new polygon is started.
+let pendingEditLayer = null;
+
+function finalizePendingEdit() {
+  if (!pendingEditLayer) return;
+  if (pendingEditLayer.editing) pendingEditLayer.editing.disable();
+  const raw = pendingEditLayer.getLatLngs();
   const latlngs = Array.isArray(raw[0]) ? raw[0] : (raw[0].lat !== undefined ? raw : raw[0]);
+  map.removeLayer(pendingEditLayer);
+  pendingEditLayer = null;
 
   // Check for self-intersections and auto-split if found
   const coords = latlngs.map(ll => [ll.lng, ll.lat]);
@@ -939,10 +949,23 @@ map.on(L.Draw.Event.CREATED, e => {
       setStatus('Self-intersecting polygon automatically split into ' + n + ' valid polygons.', 'info');
       return;
     }
-  } catch(err) { /* fall through to normal add if turf fails */ }
+  } catch(err) { /* fall through */ }
 
   addPolygon(latlngs, 'Drawn polygon ' + (nextPolyId + 1));
+}
+
+map.on(L.Draw.Event.CREATED, e => {
+  // Lock any previous pending edit before starting this new one
+  if (pendingEditLayer) finalizePendingEdit();
+
+  pendingEditLayer = e.layer;
+  // Dashed outline signals "editable — drag corners to adjust"
+  pendingEditLayer.setStyle({ color: '#C8611A', fillColor: '#C8611A', fillOpacity: 0.08, weight: 2, dashArray: '7,5' });
+  pendingEditLayer.addTo(map);
+  if (pendingEditLayer.editing) pendingEditLayer.editing.enable();
+  setStatus('Drag corners to adjust the polygon, then click Fetch when ready.', 'info');
 });
+
 
 // State
 let polygons = [], allRecords = [], activeFilters = new Set();
@@ -2530,6 +2553,8 @@ const MAX_RECORDS = 10000; // hard limit — queries above this are rejected bef
 
 // GBIF live occurrence search API — returns same records as the GBIF browser (no snapshot lag)
 runBtn.addEventListener('click', async () => {
+  // Lock any polygon still in edit mode before fetching
+  finalizePendingEdit();
   if (isFetching) {
     fetchAbortFlag = true;
     runBtn.textContent = 'Cancelling…';
@@ -2921,7 +2946,7 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
   </div>
   <div class="changelog-scroll" id="changelogScroll">
     <div class="changelog-version">
-      <span class="changelog-version-tag">v2.16</span>
+      <span class="changelog-version-tag">v2.17</span>
       <span class="changelog-date">May 2026</span>
       <ul>
         <li>Source links (iNaturalist, eBird, Xeno-canto, museum collections) now appear in the species checklist record rows, not just in map popups</li>
