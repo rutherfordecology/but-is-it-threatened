@@ -80,6 +80,7 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 .check-row { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); margin-bottom: 0.45rem; }
 .check-row input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--green); }
 
+@keyframes hintFade { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
 .run-btn { width: 100%; padding: 9px; font-size: 14px; font-family: var(--font-sans); font-weight: 500; background: var(--green-dark); color: white; border: none; border-radius: var(--radius); cursor: pointer; transition: background 0.15s, opacity 0.15s; }
 .run-btn:hover:not(:disabled) { opacity: 0.88; }
 .run-btn:disabled { opacity: 0.35; cursor: not-allowed; }
@@ -366,7 +367,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.19</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.20</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -529,6 +530,17 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 
   <div id="map-wrap">
     <div id="map"></div>
+    <!-- Draw hint — visible until user starts drawing, then hidden permanently -->
+    <div id="drawHint" style="
+      position:absolute; top:80px; left:48px; z-index:1000; pointer-events:none;
+      display:flex; align-items:center; gap:6px; animation: hintFade 0.4s ease;">
+      <div style="
+        background:var(--green-dark); color:#fff; font-size:12px; font-weight:500;
+        padding:6px 10px; border-radius:20px; white-space:nowrap;
+        box-shadow:0 2px 8px rgba(0,0,0,0.25); line-height:1.3;">
+        ← Draw your area here
+      </div>
+    </div>
     <div id="drawActionBar">
       <button id="undoPointBtn">&#x21A9; Undo point</button>
       <button id="cancelDrawBtn">&#x2715; Cancel</button>
@@ -772,7 +784,13 @@ const undoPointBtn  = document.getElementById('undoPointBtn');
 const cancelDrawBtn = document.getElementById('cancelDrawBtn');
 let activeDrawHandler = null;
 
+function hideDrawHint() {
+  const h = document.getElementById('drawHint');
+  if (h) h.style.display = 'none';
+}
+
 map.on(L.Draw.Event.DRAWSTART, e => {
+  hideDrawHint();
   // Lock any polygon waiting in edit mode before starting a new draw
   if (typeof finalizePendingEdit === 'function') finalizePendingEdit();
   // e.handler is the Leaflet.draw polygon handler; fall back to direct lookup if missing
@@ -1281,6 +1299,7 @@ function latlngsToWKT(latlngs) {
 }
 
 function addPolygon(latlngs, label) {
+  hideDrawHint();
   const id = nextPolyId++;
   const colour = POLY_COLOURS[id % POLY_COLOURS.length];
   const layer = L.polygon(latlngs, { color: colour, fillColor: colour, fillOpacity: 0.1, weight: 2 });
@@ -2949,7 +2968,7 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
   </div>
   <div class="changelog-scroll" id="changelogScroll">
     <div class="changelog-version">
-      <span class="changelog-version-tag">v2.19</span>
+      <span class="changelog-version-tag">v2.20</span>
       <span class="changelog-date">May 2026</span>
       <ul>
         <li>Source links (iNaturalist, eBird, Xeno-canto, museum collections) now appear in the species checklist record rows, not just in map popups</li>
