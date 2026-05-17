@@ -340,7 +340,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.61</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.62</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1481,23 +1481,21 @@ function renderPhotoSlot(slotId, idx) {
   const sciName = slot.dataset.sciName || '';
 
   const navHtml = total > 1
-    ? '<div style="position:absolute;bottom:22px;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:5px;pointer-events:none;">' +
-      '<button onclick="window._gbifNavSpeciesPhoto(\'' + slotId + '\',-1)" ' +
-        'style="pointer-events:all;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 0 1px 0;">&#8249;</button>' +
-      '<span style="color:#fff;font-size:10px;font-weight:600;background:rgba(0,0,0,0.45);padding:1px 6px;border-radius:8px;">' + (idx + 1) + '\u00a0/\u00a0' + total + '</span>' +
-      '<button onclick="window._gbifNavSpeciesPhoto(\'' + slotId + '\',1)" ' +
-        'style="pointer-events:all;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 0 1px 0;">&#8250;</button>' +
+    ? '<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px;">' +
+      '<button onclick="event.stopPropagation();window._gbifNavSpeciesPhoto(\'' + slotId + '\',-1)" ' +
+        'style="background:var(--surface2,#f0f0f0);color:var(--text,#333);border:1px solid var(--border,#ddd);border-radius:50%;width:26px;height:26px;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 0 1px 0;flex-shrink:0;">&#8249;</button>' +
+      '<span style="font-size:11px;color:var(--text2,#666);font-weight:600;">' + (idx + 1) + '\u00a0/\u00a0' + total + '</span>' +
+      '<button onclick="event.stopPropagation();window._gbifNavSpeciesPhoto(\'' + slotId + '\',1)" ' +
+        'style="background:var(--surface2,#f0f0f0);color:var(--text,#333);border:1px solid var(--border,#ddd);border-radius:50%;width:26px;height:26px;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 0 1px 0;flex-shrink:0;">&#8250;</button>' +
       '</div>'
     : '';
 
   slot.innerHTML =
-    '<div style="position:relative;">' +
-      '<img src="' + photo.url + '" alt="' + sciName + '" ' +
-        'style="width:100%;height:' + imgH + ';object-fit:cover;border-radius:4px;display:block;" ' +
-        'onload="if(this.naturalHeight>this.naturalWidth){this.style.width=\'auto\';this.style.maxWidth=\'100%\';this.style.objectFit=\'contain\';this.style.margin=\'0 auto\';}" ' +
-        'onerror="this.parentElement.parentElement.innerHTML=\'\'">' +
-      navHtml +
-    '</div>' +
+    '<img src="' + photo.url + '" alt="' + sciName + '" ' +
+      'style="width:100%;height:' + imgH + ';object-fit:cover;border-radius:4px;display:block;" ' +
+      'onload="if(this.naturalHeight>this.naturalWidth){this.style.width=\'auto\';this.style.maxWidth=\'100%\';this.style.objectFit=\'contain\';this.style.margin=\'0 auto\';}" ' +
+      'onerror="this.parentElement.innerHTML=\'\'">' +
+    navHtml +
     '<div style="font-size:9px;color:#9b9890;margin-top:2px;line-height:1.3;">' +
     licenceBadge(photo.licence) + (photo.photographer || '') + '</div>';
 }
