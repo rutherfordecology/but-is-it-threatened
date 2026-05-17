@@ -341,7 +341,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.66</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.67</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -466,6 +466,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
         <div class="tool-row" style="margin-top:0.6rem;">
           <button class="tool-btn active" id="btnPoints" onclick="setViewMode('points')">Points</button>
           <button class="tool-btn" id="btnHeat" onclick="setViewMode('heat')">Heatmap</button>
+          <button class="tool-btn" id="btnDiversity" onclick="setViewMode('diversity')">Diversity</button>
         </div>
         <button class="tool-btn" id="btnChecklist" onclick="toggleChecklist()" style="width:100%;margin-top:6px;">Show species checklist</button>
         <div class="export-row" style="margin-top:0.75rem;">
@@ -1804,12 +1805,65 @@ function renderHeatmap(records) {
   csvData = buildCSV(filtered);
 }
 
+function diversityCellSize() {
+  const z = map.getZoom();
+  if (z <= 8)  return 0.1;
+  if (z <= 11) return 0.05;
+  if (z <= 13) return 0.02;
+  if (z <= 15) return 0.005;
+  return 0.001; // ~110 m
+}
+
+function renderDiversityHeatmap(records) {
+  if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
+  if (heatLayer)    { map.removeLayer(heatLayer);    heatLayer = null; }
+
+  const filtered = records.filter(r => passesFilters(r) && r.decimalLatitude != null);
+  const heatCenterLng = map.getCenter().lng;
+  const cs = diversityCellSize();
+
+  // Count unique species per grid cell
+  const cells = {};
+  filtered.forEach(r => {
+    let hLng = r.decimalLongitude;
+    while (hLng < heatCenterLng - 180) hLng += 360;
+    while (hLng > heatCenterLng + 180) hLng -= 360;
+    const cellLat = Math.round(r.decimalLatitude / cs) * cs;
+    const cellLng = Math.round(hLng / cs) * cs;
+    const key = cellLat.toFixed(7) + ',' + cellLng.toFixed(7);
+    if (!cells[key]) cells[key] = { lat: cellLat, lng: cellLng, species: new Set() };
+    const sp = r.species || r.scientificName || '';
+    if (sp) cells[key].species.add(sp);
+  });
+
+  const values = Object.values(cells);
+  const maxSp = Math.max(...values.map(c => c.species.size), 1);
+
+  // sqrt-normalised weight: gives visual range to low-diversity cells while
+  // keeping the highest-diversity cell at full intensity
+  const heatPoints = values.map(c =>
+    [c.lat, c.lng, Math.sqrt(c.species.size / maxSp)]
+  );
+
+  heatLayer = L.heatLayer(heatPoints, { radius: 35, blur: 28, maxZoom: 17, minOpacity: 0.05 });
+  map.addLayer(heatLayer);
+  document.getElementById('mShown').textContent = filtered.length.toLocaleString();
+  csvData = buildCSV(filtered);
+}
+
+// Re-render diversity heatmap when zoom changes (cell size is zoom-adaptive)
+map.on('zoomend', function() {
+  if (viewMode === 'diversity' && allRecords.length > 0) renderDiversityHeatmap(allRecords);
+});
+
 function setViewMode(mode) {
   viewMode = mode;
   document.getElementById('btnPoints').classList.toggle('active', mode === 'points');
   document.getElementById('btnHeat').classList.toggle('active', mode === 'heat');
+  document.getElementById('btnDiversity').classList.toggle('active', mode === 'diversity');
   if (allRecords.length === 0) return;
   if (mode === 'points') renderPoints(allRecords);
+  else if (mode === 'diversity') renderDiversityHeatmap(allRecords);
   else renderHeatmap(allRecords);
 }
 
@@ -1937,6 +1991,7 @@ function buildFilterChips(records) {
       if (chipMap[k]) chipMap[k].classList.toggle('off', !activeFilters.has(k));
     });
     if (viewMode === 'points') renderPoints(allRecords);
+    else if (viewMode === 'diversity') renderDiversityHeatmap(allRecords);
     else renderHeatmap(allRecords);
     filterChecklistByTaxon();
     syncSelectAllBtn();
