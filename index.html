@@ -366,7 +366,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.24</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.25</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1330,6 +1330,13 @@ function latlngsToWKT(latlngs) {
     prevLng = lng;
     coords.push([parseFloat(lng.toFixed(6)), parseFloat(lat.toFixed(6))]);
   }
+  // If any longitude ended up < -180 (happens when the first vertex was just
+  // east of the antimeridian and got snapped to ~-179, pulling later vertices
+  // to -181 etc.), shift the whole ring by +360 so the antimeridian crossing
+  // is expressed with positive-extended longitudes (e.g. 181) which GBIF accepts.
+  // GBIF documents positive extended longitudes but not negative ones.
+  if (coords.some(c => c[0] < -180)) coords.forEach(c => { c[0] += 360; });
+
   // Close ring
   const first = coords[0], last = coords[coords.length - 1];
   if (first[0] !== last[0] || first[1] !== last[1]) coords.push(first.slice());
@@ -3024,6 +3031,13 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     <button class="changelog-close" id="changelogClose">&#x2715;</button>
   </div>
   <div class="changelog-scroll" id="changelogScroll">
+    <div class="changelog-version">
+      <span class="changelog-version-tag">v2.25</span>
+      <span class="changelog-date">May 2026</span>
+      <ul>
+        <li>Fixed polygon rejection for areas east of New Zealand — antimeridian-crossing polygons now always use positive-extended longitudes (e.g. 181°) which GBIF requires</li>
+      </ul>
+    </div>
     <div class="changelog-version">
       <span class="changelog-version-tag">v2.24</span>
       <span class="changelog-date">May 2026</span>
