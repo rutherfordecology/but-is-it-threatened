@@ -344,7 +344,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.86</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.87</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1892,7 +1892,8 @@ function renderHeatmap(records) {
     [lat, lng, Math.min(1, 0.15 * Math.log2(n + 1))]
   );
 
-  heatLayer = L.heatLayer(heatPoints, { radius: 30, blur: 25, maxZoom: 17, minOpacity: 0.05, max: 0.4 });
+  heatLayer = L.heatLayer(heatPoints, { radius: 30, blur: 25, maxZoom: 17, minOpacity: 0.05, max: 0.2,
+    gradient: { 0.0: 'blue', 0.35: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red' } });
   map.addLayer(heatLayer);
   document.getElementById('mShown').textContent = filtered.length.toLocaleString();
   csvData = buildCSV(filtered);
@@ -1911,10 +1912,10 @@ function diversityCellSize() {
 
 function diversityHeatRadius() {
   const z = map.getZoom();
-  if (z <= 11) return { radius: 42, blur: 30 };
-  if (z <= 14) return { radius: 32, blur: 22 };
-  if (z <= 16) return { radius: 26, blur: 18 };
-  return { radius: 20, blur: 14 };
+  if (z <= 11) return { radius: 42, blur: 4 };
+  if (z <= 14) return { radius: 32, blur: 4 };
+  if (z <= 16) return { radius: 26, blur: 3 };
+  return { radius: 20, blur: 3 };
 }
 
 function renderDiversityHeatmap(records) {
@@ -1949,7 +1950,7 @@ function renderDiversityHeatmap(records) {
   );
 
   const { radius, blur } = diversityHeatRadius();
-  heatLayer = L.heatLayer(heatPoints, { radius, blur, maxZoom: 19, minOpacity: 0, max: 0.4 });
+  heatLayer = L.heatLayer(heatPoints, { radius, blur, maxZoom: 19, minOpacity: 0 });
   map.addLayer(heatLayer);
   document.getElementById('mShown').textContent = filtered.length.toLocaleString();
   csvData = buildCSV(filtered);
