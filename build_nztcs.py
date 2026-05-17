@@ -124,122 +124,95 @@ for alias_key, canonical_key in aliases.items():
 
 print(f"  Alias entries added: {added}")
 
-# ── Subspecies binomial aliases ────────────────────────────────────────────
-# GBIF often records observations at species level (e.g. "Egretta sacra")
-# even when NZTCS only lists the subspecies (e.g. "Egretta sacra sacra").
-# Build a binomial alias (first 2 words) for every 3-word Latin subspecies
-# entry that doesn't already have a binomial key.  When multiple subspecies
-# exist for the same species, pick the most-threatened one.
+# ── Subspecies binomial + split-species + old-name aliases ────────────────
+# Rule: only add a binomial alias when ALL subspecies that share that
+# binomial have the SAME status.  Mixed-status subspecies (e.g. Tui with
+# a Not Threatened mainland form and a NV Chatham Island form) must not
+# generate an alias — showing the most-threatened one is misleading.
 
-STATUS_RANK = {
-    'Nationally Critical': 0, 'Nationally Endangered': 1,
-    'Nationally Vulnerable': 2, 'Declining': 3,
-    'Naturally Uncommon': 4, 'Relict': 5, 'Uncommon': 6,
-    'Recovering': 7, 'Nationally Increasing': 8, 'Extinct': 9,
-    'Not Threatened': 10, 'Introduced and Naturalised': 11,
-    'Vagrant': 12, 'Data Deficient': 13,
-}
-
-def is_latin_subsp(key, entry):
-    """True if key looks like a 3-word Latin trinomial (genus epithet subsp)."""
-    parts = key.split()
-    if len(parts) != 3:
-        return False
-    # All three parts should be simple alphabetic tokens (allow hyphens)
-    if not all(re.match(r'^[a-z][a-z\-]*$', p) for p in parts):
-        return False
-    # Original name's first letter should be uppercase (Latin genus)
-    orig = entry.get('name', '')
-    return orig[:1].isupper()
-
-from collections import defaultdict
-binomial_candidates = defaultdict(list)   # binomial → list of entries
-
-for key, entry in lookup.items():
-    if is_latin_subsp(key, entry):
-        parts = key.split()
-        binomial = parts[0] + ' ' + parts[1]
-        binomial_candidates[binomial].append(entry)
-
-subsp_added = 0
-for binomial, entries in binomial_candidates.items():
-    if binomial in lookup:
-        continue  # binomial already has its own entry — don't overwrite
-    # Pick the most-threatened entry for this binomial
-    best = min(entries, key=lambda e: (STATUS_RANK.get(e.get('status'), 99), -(e.get('year') or 0)))
-    lookup[binomial] = best
-    subsp_added += 1
-
-print(f"  Subspecies binomial aliases added: {subsp_added}")
-
-# ── Old-name binomial aliases ──────────────────────────────────────────────
-# Many NZ taxa were reclassified to a new genus (e.g. Porzana → Zapornia).
-# The Previous Name field captures the old name, e.g. "Porzana tabuensis tabuensis
-# Gmelin, 1789". The alias dict maps the normalised old name (including authority)
-# to the canonical current key — but GBIF still records the old binomial
-# "Porzana tabuensis" which is never in the lookup.
-#
-# Fix: for every alias key whose first two tokens form a binomial not yet in the
-# lookup, add that binomial pointing to the same entry.
-
-def looks_like_latin_binomial_prefix(key):
-    """True if the key starts with two lowercase alphabetic words (Latin binomial)."""
+def is_latin_name(key, entry):
+    """True if key uses only lowercase alpha/hyphen tokens and looks Latin."""
     parts = key.split()
     if len(parts) < 2:
         return False
-    return bool(re.match(r'^[a-z][a-z\-]+$', parts[0]) and re.match(r'^[a-z][a-z\-]+$', parts[1]))
+    if not all(re.match(r'^[a-z][a-z\-]*$', p) for p in parts):
+        return False
+    return entry.get('name', '')[:1].isupper()
 
-old_binomial_added = 0
-# aliases still maps alias_key → canonical_key (before merging into lookup)
-# But we already merged them into lookup above. Re-derive from lookup keys that
-# aren't in the original lookup (i.e. came from aliases) — simpler: iterate
-# all existing lookup keys and generate binomials for any that look like old names.
+from collections import defaultdict
 
-# Collect all lookup keys that look like "genus species subsp authority..."
-# (4+ tokens) and generate binomial aliases from them.
-for key in list(lookup.keys()):
+# --- 1. Subspecies binomial aliases (current 3-word names → 2-word binomial) ---
+binomial_candidates = defaultdict(list)
+for key, entry in lookup.items():
     parts = key.split()
-    # Must have at least 3 tokens and start with two lowercase alpha words
-    if len(parts) < 3:
-        continue
-    if not looks_like_latin_binomial_prefix(key):
-        continue
-    binomial = parts[0] + ' ' + parts[1]
+    if len(parts) == 3 and is_latin_name(key, entry):
+        binomial_candidates[parts[0] + ' ' + parts[1]].append(entry)
+
+subsp_added = subsp_skipped = 0
+for binomial, entries in binomial_candidates.items():
     if binomial in lookup:
         continue
-    # Add binomial alias pointing to this entry
-    lookup[binomial] = lookup[key]
-    old_binomial_added += 1
+    statuses = set(e.get('status') for e in entries)
+    if len(statuses) == 1:               # all subspecies agree → safe alias
+        lookup[binomial] = entries[0]
+        subsp_added += 1
+    else:
+        subsp_skipped += 1               # mixed → no alias, no misleading badge
 
-print(f"  Old-name binomial aliases added: {old_binomial_added}")
+print(f"  Subspecies binomial aliases added: {subsp_added} (skipped {subsp_skipped} mixed-status)")
 
-# ── Split-species aliases ──────────────────────────────────────────────────
-# When a subspecies (e.g. Zapornia pusilla affinis) is treated as a full
-# species by some authorities, it becomes Genus + subspecies epithet
-# (e.g. Zapornia affinis). GBIF sometimes uses the split-species name.
-# For every 3-word trinomial where the subspecies epithet differs from the
-# species epithet, add "genus subsp_epithet" as an additional alias.
+# --- 2. Old-name binomial aliases (4+ token alias keys → 2-word binomial) ---
+# e.g. "porzana tabuensis tabuensis gmelin, 1789" → "porzana tabuensis"
+# Collect candidates first, then apply the same all-agree rule.
+old_binomial_candidates = defaultdict(list)
+for key in list(lookup.keys()):
+    parts = key.split()
+    if len(parts) < 3:
+        continue
+    if not is_latin_name(key, lookup[key]):
+        continue
+    binomial = parts[0] + ' ' + parts[1]
+    if binomial not in lookup:
+        old_binomial_candidates[binomial].append(lookup[key])
 
-split_added = 0
+old_binomial_added = old_binomial_skipped = 0
+for binomial, entries in old_binomial_candidates.items():
+    statuses = set(e.get('status') for e in entries)
+    if len(statuses) == 1:
+        lookup[binomial] = entries[0]
+        old_binomial_added += 1
+    else:
+        old_binomial_skipped += 1
+
+print(f"  Old-name binomial aliases added: {old_binomial_added} (skipped {old_binomial_skipped} mixed-status)")
+
+# --- 3. Split-species aliases (genus + subspecies epithet, e.g. "zapornia affinis") ---
+# When a subspecies is treated as a full species by some authorities.
+# Only safe when the subspecies epithet maps to a unique status.
+split_candidates = defaultdict(list)
 for key in list(lookup.keys()):
     parts = key.split()
     if len(parts) != 3:
         continue
-    if not all(re.match(r'^[a-z][a-z\-]+$', p) for p in parts):
+    if not is_latin_name(key, lookup[key]):
         continue
     genus, species_ep, subsp_ep = parts
     if subsp_ep == species_ep:
-        continue  # nominate subspecies — genus+subsp same as binomial, already exists
-    # Original entry should look like a Latin name
-    entry = lookup[key]
-    if not (entry.get('name', '')[:1].isupper()):
-        continue
+        continue  # nominate subspecies already covered by binomial alias
     split_key = genus + ' ' + subsp_ep
     if split_key not in lookup:
-        lookup[split_key] = entry
-        split_added += 1
+        split_candidates[split_key].append(lookup[key])
 
-print(f"  Split-species aliases added: {split_added}")
+split_added = split_skipped = 0
+for split_key, entries in split_candidates.items():
+    statuses = set(e.get('status') for e in entries)
+    if len(statuses) == 1:
+        lookup[split_key] = entries[0]
+        split_added += 1
+    else:
+        split_skipped += 1
+
+print(f"  Split-species aliases added: {split_added} (skipped {split_skipped} mixed-status)")
 print(f"  Total lookup entries: {len(lookup)}")
 
 # Status summary
