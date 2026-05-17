@@ -212,6 +212,34 @@ for key in list(lookup.keys()):
     old_binomial_added += 1
 
 print(f"  Old-name binomial aliases added: {old_binomial_added}")
+
+# ── Split-species aliases ──────────────────────────────────────────────────
+# When a subspecies (e.g. Zapornia pusilla affinis) is treated as a full
+# species by some authorities, it becomes Genus + subspecies epithet
+# (e.g. Zapornia affinis). GBIF sometimes uses the split-species name.
+# For every 3-word trinomial where the subspecies epithet differs from the
+# species epithet, add "genus subsp_epithet" as an additional alias.
+
+split_added = 0
+for key in list(lookup.keys()):
+    parts = key.split()
+    if len(parts) != 3:
+        continue
+    if not all(re.match(r'^[a-z][a-z\-]+$', p) for p in parts):
+        continue
+    genus, species_ep, subsp_ep = parts
+    if subsp_ep == species_ep:
+        continue  # nominate subspecies — genus+subsp same as binomial, already exists
+    # Original entry should look like a Latin name
+    entry = lookup[key]
+    if not (entry.get('name', '')[:1].isupper()):
+        continue
+    split_key = genus + ' ' + subsp_ep
+    if split_key not in lookup:
+        lookup[split_key] = entry
+        split_added += 1
+
+print(f"  Split-species aliases added: {split_added}")
 print(f"  Total lookup entries: {len(lookup)}")
 
 # Status summary
