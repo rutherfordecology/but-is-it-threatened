@@ -338,7 +338,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.56</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.57</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -971,11 +971,17 @@ function clearResults() {
 }
 
 // Polygons
+function normLng(lng) {
+  // Leaflet uses continuous world coordinates; normalise to [-180, 180]
+  lng = ((lng % 360) + 360) % 360;
+  return lng > 180 ? lng - 360 : lng;
+}
+
 function latlngsToWKT(latlngs) {
   let coords = latlngs.map(ll => {
     const lat = ll.lat !== undefined ? ll.lat : ll[0];
     const lng = ll.lng !== undefined ? ll.lng : ll[1];
-    return [parseFloat(lng.toFixed(6)), parseFloat(lat.toFixed(6))];
+    return [parseFloat(normLng(lng).toFixed(6)), parseFloat(lat.toFixed(6))];
   });
   const first = coords[0], last = coords[coords.length - 1];
   if (first[0] !== last[0] || first[1] !== last[1]) coords.push(coords[0].slice());
