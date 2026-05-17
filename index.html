@@ -107,7 +107,7 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 .tool-btn:hover:not(.active) { background: var(--border); }
 
 .export-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 0.6rem; }
-.draw-dist-label { background: rgba(0,0,0,0.62); color: #fff; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; white-space: nowrap; pointer-events: none; font-family: var(--font-sans); transform: translate(-50%,-50%); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+.draw-dist-label { background: rgba(0,0,0,0.62); color: #fff; font-size: 13px; font-weight: 600; padding: 3px 9px; border-radius: 10px; white-space: nowrap; pointer-events: none; font-family: var(--font-sans); transform: translate(-50%,-50%); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 .draw-dist-moving { background: rgba(200,97,26,0.88); }
 .dl-btn { width: 100%; padding: 8px; font-size: 13px; font-family: var(--font-sans); font-weight: 500; background: var(--green-light); color: var(--green-dark); border: 1px solid var(--green-mid); border-radius: var(--radius); cursor: pointer; transition: background 0.12s; }
 .dl-btn:hover { background: #c8e8db; }
@@ -340,7 +340,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
     <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a></h1>
-    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.60</span>
+    <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v1.61</span>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -734,11 +734,12 @@ map.on('draw:drawvertex', function(e) {
 
 map.on('mousemove', function(e) {
   if (!isDrawingPoly || !drawLastVertex) return;
+  const mid  = L.latLng((drawLastVertex.lat + e.latlng.lat) / 2, (drawLastVertex.lng + e.latlng.lng) / 2);
   const text = fmtDist(drawLastVertex.distanceTo(e.latlng));
   if (!drawMoveLabel) {
-    drawMoveLabel = makeDistLabel(e.latlng, text, true);
+    drawMoveLabel = makeDistLabel(mid, text, true);
   } else {
-    drawMoveLabel.setLatLng(e.latlng);
+    drawMoveLabel.setLatLng(mid);
     drawMoveLabel.setIcon(L.divIcon({
       className: 'draw-dist-label draw-dist-moving',
       html: text,
