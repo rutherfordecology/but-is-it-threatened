@@ -440,6 +440,12 @@ html, body { max-width: 100vw; overflow-x: hidden; }
             <button class="browse-sel-all" id="browseSelAllBtn">Select all visible</button>
           </div>
           <div class="browse-list" id="browseList"></div>
+          <div id="browseIntersectRow" style="display:none;margin-bottom:0.5rem;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text2);">
+              <input type="checkbox" id="browseIntersectCb" style="accent-color:var(--green);flex-shrink:0;">
+              Clip to drawn polygon(s) — only fetch within overlap
+            </label>
+          </div>
           <div class="browse-actions">
             <button class="browse-add-btn" id="browseAddBtn" disabled>Add selected</button>
             <button class="browse-cancel-btn" id="browseCancelBtn">Cancel</button>
@@ -1594,6 +1600,11 @@ function enterBrowseMode(polys) {
   browseSelAllBtn.textContent = 'Select all visible';
   renderBrowseList('');
   updateBrowseSelCount();
+  // Show the intersect checkbox only when a drawn polygon already exists
+  const browseIntersectRow = document.getElementById('browseIntersectRow');
+  const browseIntersectCb  = document.getElementById('browseIntersectCb');
+  browseIntersectRow.style.display = polygons.length > 0 ? 'block' : 'none';
+  browseIntersectCb.checked = false;
   browsePanel.style.display = 'block';
   dropZone.style.display = 'none';
   setStatus('Browse mode: select the polygons you want to query, then click Add.', 'info');
@@ -1660,12 +1671,54 @@ browseSelAllBtn.addEventListener('click', () => {
   updateBrowseSelCount();
 });
 
+function llToGeoJSON(ll) {
+  // Convert either [lat,lng] array or {lat,lng} object → GeoJSON [lng,lat]
+  return ll.lat !== undefined ? [ll.lng, ll.lat] : [ll[1], ll[0]];
+}
+function closeRingCoords(coords) {
+  if (coords[0][0] !== coords[coords.length-1][0] || coords[0][1] !== coords[coords.length-1][1])
+    return [...coords, coords[0]];
+  return coords;
+}
+
 browseAddBtn.addEventListener('click', () => {
   const selected = browsePolygons.filter(bp => bp.selected);
   if (!selected.length) return;
+  const doIntersect = document.getElementById('browseIntersectCb').checked && polygons.length > 0;
+  const drawnSnapshot = polygons.slice(); // snapshot before exitBrowseMode clears nothing (drawn polys stay)
   exitBrowseMode();
-  selected.forEach(bp => addPolygon(bp.latlngs, bp.name));
-  setStatus(selected.length.toLocaleString() + ' polygon' + (selected.length === 1 ? '' : 's') + ' added. Ready to fetch.', 'success');
+
+  if (doIntersect) {
+    let added = 0, skipped = 0;
+    selected.forEach(bp => {
+      const coordsA = closeRingCoords(bp.latlngs.map(llToGeoJSON));
+      drawnSnapshot.forEach(drawnPoly => {
+        const coordsB = closeRingCoords(drawnPoly.latlngs.map(llToGeoJSON));
+        try {
+          const result = turf.intersect(turf.polygon([coordsA]), turf.polygon([coordsB]));
+          if (!result) { skipped++; return; }
+          const geom = result.geometry;
+          if (geom.type === 'Polygon') {
+            addPolygon(geom.coordinates[0].map(c => [c[1], c[0]]), bp.name + ' ∩ ' + drawnPoly.label);
+            added++;
+          } else if (geom.type === 'MultiPolygon') {
+            geom.coordinates.forEach((part, i) => {
+              addPolygon(part[0].map(c => [c[1], c[0]]), bp.name + ' ∩ ' + drawnPoly.label + (i > 0 ? ' (' + (i+1) + ')' : ''));
+              added++;
+            });
+          }
+        } catch(e) { skipped++; }
+      });
+    });
+    if (added === 0) {
+      setStatus('No overlap found between selected and drawn polygon(s).', 'warning');
+    } else {
+      setStatus(added + ' intersection polygon' + (added === 1 ? '' : 's') + ' added.' + (skipped ? ' ' + skipped + ' had no overlap.' : '') + ' Ready to fetch.', 'success');
+    }
+  } else {
+    selected.forEach(bp => addPolygon(bp.latlngs, bp.name));
+    setStatus(selected.length.toLocaleString() + ' polygon' + (selected.length === 1 ? '' : 's') + ' added. Ready to fetch.', 'success');
+  }
 });
 
 browseCancelBtn.addEventListener('click', exitBrowseMode);
