@@ -1600,10 +1600,9 @@ function enterBrowseMode(polys) {
   browseSelAllBtn.textContent = 'Select all visible';
   renderBrowseList('');
   updateBrowseSelCount();
-  // Show the intersect checkbox only when a drawn polygon already exists
   const browseIntersectRow = document.getElementById('browseIntersectRow');
   const browseIntersectCb  = document.getElementById('browseIntersectCb');
-  browseIntersectRow.style.display = polygons.length > 0 ? 'block' : 'none';
+  browseIntersectRow.style.display = 'block';
   browseIntersectCb.checked = false;
   browsePanel.style.display = 'block';
   dropZone.style.display = 'none';
@@ -1684,8 +1683,13 @@ function closeRingCoords(coords) {
 browseAddBtn.addEventListener('click', () => {
   const selected = browsePolygons.filter(bp => bp.selected);
   if (!selected.length) return;
-  const doIntersect = document.getElementById('browseIntersectCb').checked && polygons.length > 0;
-  const drawnSnapshot = polygons.slice(); // snapshot before exitBrowseMode clears nothing (drawn polys stay)
+  const wantsIntersect = document.getElementById('browseIntersectCb').checked;
+  if (wantsIntersect && polygons.length === 0) {
+    setStatus('Draw a polygon on the map first, then click Add.', 'warning');
+    return;
+  }
+  const doIntersect = wantsIntersect && polygons.length > 0;
+  const drawnSnapshot = polygons.slice();
   exitBrowseMode();
 
   if (doIntersect) {
