@@ -397,7 +397,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.42</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.43</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -3171,7 +3171,7 @@ runBtn.addEventListener('click', async () => {
     setStatus('Fetching records from GBIF' + polyLabel + '...', 'info');
     setProgress(5, 'Contacting GBIF...');
 
-    let offset = 0, totalCount = null;
+    let offset = 0, totalCount = null, hullRetried = false;
     while (true) {
       if (fetchAbortFlag) {
         setStatus('Fetch cancelled.', 'warning');
@@ -3205,8 +3205,23 @@ runBtn.addEventListener('click', async () => {
           if (res.status === 400) {
             let reason = '';
             try { const j = JSON.parse(txt); reason = j.message || j.error || txt.substring(0, 200); } catch(e) { reason = txt.substring(0, 200); }
-            setStatus('GBIF rejected the request — ' + (reason || 'unknown reason') + '.', 'error');
-            setFetchMode(false); return;
+            // Invalid shape: try convex hull once, then skip this polygon
+            if (!hullRetried && reason.includes('Invalid shape') && poly.latlngs) {
+              try {
+                const coords = closeRingCoords(poly.latlngs.map(llToGeoJSON));
+                const hull = turf.convex(turf.polygon([coords]));
+                if (hull) {
+                  const hullLL = hull.geometry.coordinates[0].slice(0, -1).map(c => [c[1], c[0]]);
+                  baseParams[0] = ['geometry', latlngsToWKT(hullLL)];
+                  hullRetried = true; offset = 0; totalCount = null;
+                  setStatus('Polygon ' + (pi+1) + ' has invalid shape — retrying with convex hull' + polyLabel + '...', 'warning');
+                  continue;
+                }
+              } catch(e) {}
+            }
+            // Still failing — skip this polygon and continue with remaining
+            setStatus('Skipping polygon ' + (pi+1) + ' — shape rejected by GBIF' + (hullRetried ? ' even after convex hull fallback' : '') + '.', 'warning');
+            break;
           }
           throw new Error('HTTP ' + res.status + ': ' + txt.substring(0, 200));
         }
@@ -3558,6 +3573,13 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     <button class="changelog-close" id="changelogClose">&#x2715;</button>
   </div>
   <div class="changelog-scroll" id="changelogScroll">
+    <div class="changelog-version">
+      <span class="changelog-version-tag">v2.43</span>
+      <span class="changelog-date">May 2026</span>
+      <ul>
+        <li>When GBIF rejects a polygon as invalid shape, automatically retries with its convex hull rather than stopping the whole fetch — remaining polygons continue to load</li>
+      </ul>
+    </div>
     <div class="changelog-version">
       <span class="changelog-version-tag">v2.42</span>
       <span class="changelog-date">May 2026</span>
