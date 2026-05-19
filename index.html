@@ -396,7 +396,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.63</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.64</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -612,7 +612,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <div class="cl-header">
         <span class="cl-title">Species checklist</span>
         <div style="display:flex;align-items:center;gap:6px;margin-right:36px;">
-          <button class="cl-nztcs-btn" id="clNztcsBtn" title="Unlock NZTCS conservation status">🔒 NZTCS</button>
+          <button class="cl-nztcs-btn unlocked" id="clNztcsBtn" title="NZTCS conservation status active" style="display:none;">✅ NZTCS</button>
 <button class="cl-close" id="clCloseBtn">&#x2715;</button>
         </div>
       </div>
@@ -724,18 +724,15 @@ html, body { max-width: 100vw; overflow-x: hidden; }
   </div>
 </div>
 
-<!-- NZTCS unlock modal -->
-<div class="modal-overlay" id="nztcsModal">
-  <div class="modal" style="max-width:360px;">
-    <h2 style="margin-bottom:0.5rem;">🔒 NZTCS status</h2>
-    <p>Enter your access code to unlock NZ Threat Classification System conservation status badges in the species checklist.</p>
-    <div class="field" style="margin-bottom:0.5rem;">
-      <input type="password" id="nztcsPasswordInput" placeholder="Access code" autocomplete="off">
-    </div>
-    <div id="nztcsError" style="font-size:12px;color:var(--red);margin-bottom:0.6rem;display:none;">Incorrect access code.</div>
+<!-- NZTCS beta disclaimer modal -->
+<div class="modal-overlay" id="nztcsBetaModal">
+  <div class="modal" style="max-width:420px;">
+    <h2 style="margin-bottom:0.5rem;">🧪 NZTCS status — Beta</h2>
+    <p style="margin-bottom:0.8rem;">This feature displays NZ Threat Classification System conservation status badges in the species checklist.</p>
+    <p style="margin-bottom:0.8rem;">Due to inconsistencies in taxonomic nomenclature between GBIF and NZTCS, <strong>some badges may be incorrect</strong>. Name changes, rank disagreements, and subspecies mismatches can all cause errors.</p>
+    <p style="margin-bottom:1rem;">Please check findings carefully and <a href="mailto:malcolmirutherford@gmail.com" style="color:var(--green-dark);">let us know</a> if anything appears out of order.</p>
     <div class="modal-btns">
-      <button class="modal-btn" id="nztcsCancelBtn">Cancel</button>
-      <button class="modal-btn primary" id="nztcsUnlockBtn">Unlock</button>
+      <button class="modal-btn primary" id="nztcsBetaAcceptBtn">I understand — continue</button>
     </div>
   </div>
 </div>
@@ -1961,7 +1958,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     document.getElementById('nerdsModal').classList.remove('open');
     document.getElementById('aboutModal').classList.remove('open');
-    document.getElementById('nztcsModal').classList.remove('open');
   }
 });
 
@@ -1970,10 +1966,10 @@ document.getElementById('disclaimerAccept').addEventListener('click', () => {
 });
 
 // ── NZTCS conservation status ──────────────────────────────────────────────
-const NZTCS_HASH   = '0667bd893799ba7a888de6d210b773825f25e1576e9ad503c0061015868192e1';
-const NZTCS_LS_KEY = 'nztcs_unlocked';
-let nztcsData     = null;
-let nztcsUnlocked = false;
+const NZTCS_BETA_KEY = 'nztcs_beta_agreed';
+let nztcsData        = null;
+let nztcsUnlocked    = false;
+let nztcsBetaAgreed  = !!localStorage.getItem(NZTCS_BETA_KEY);
 
 const NZTCS_STATUS_CFG = {
   'Nationally Critical':        { cls:'nc', label:'NC'  },
@@ -2053,11 +2049,6 @@ function nztcsBadgeHtml(entry, certain) {
   return `<span class="nztcs-badge nb-${cfg.cls}" title="${tip}">${label}</span>`;
 }
 
-async function hashPassword(pw) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
 function updateNztcsBtn() {
   const btn = document.getElementById('clNztcsBtn');
   if (!btn) return;
@@ -2067,9 +2058,6 @@ function updateNztcsBtn() {
     btn.title = 'NZTCS conservation status active';
     document.getElementById('clNztcsFilters').style.display = 'flex';
   } else {
-    btn.textContent = '🔒 NZTCS';
-    btn.classList.remove('unlocked');
-    btn.title = 'Unlock NZTCS conservation status';
     document.getElementById('clNztcsFilters').style.display = 'none';
   }
 }
@@ -2102,6 +2090,7 @@ document.getElementById('clNztcsFilters').addEventListener('click', e => {
 });
 
 async function loadNztcsData() {
+  if (nztcsData) { nztcsUnlocked = true; updateNztcsBtn(); if (allRecords.length > 0) buildChecklist(allRecords); return; }
   try {
     const resp = await fetch('nztcs.json');
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -2114,31 +2103,33 @@ async function loadNztcsData() {
   }
 }
 
-document.getElementById('clNztcsBtn').addEventListener('click', () => {
-  if (nztcsUnlocked) return;
-  document.getElementById('nztcsModal').classList.add('open');
-  document.getElementById('nztcsPasswordInput').value = '';
-  document.getElementById('nztcsError').style.display = 'none';
-  setTimeout(() => document.getElementById('nztcsPasswordInput').focus(), 80);
-});
-document.getElementById('nztcsCancelBtn').addEventListener('click', () => {
-  document.getElementById('nztcsModal').classList.remove('open');
-});
-document.getElementById('nztcsModal').addEventListener('click', e => {
-  if (e.target === document.getElementById('nztcsModal')) document.getElementById('nztcsModal').classList.remove('open');
-});
-document.getElementById('nztcsUnlockBtn').addEventListener('click', async () => {
-  const pw   = document.getElementById('nztcsPasswordInput').value;
-  const hash = await hashPassword(pw);
-  if (hash === NZTCS_HASH) {
-    document.getElementById('nztcsModal').classList.remove('open');
-    await loadNztcsData();
-  } else {
-    document.getElementById('nztcsError').style.display = 'block';
+// Called after each search completes. Shows NZTCS button only for NZ searches.
+async function maybeActivateNztcs(dominantCountry) {
+  const btn = document.getElementById('clNztcsBtn');
+  if (dominantCountry !== 'NZ') {
+    // Not a NZ search — hide button and deactivate
+    btn.style.display = 'none';
+    nztcsUnlocked = false;
+    document.getElementById('clNztcsFilters').style.display = 'none';
+    return;
   }
-});
-document.getElementById('nztcsPasswordInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('nztcsUnlockBtn').click();
+  // NZ search — show button
+  btn.style.display = '';
+  if (nztcsUnlocked) return; // already active
+  // Show beta disclaimer if not yet agreed
+  if (!nztcsBetaAgreed) {
+    document.getElementById('nztcsBetaModal').classList.add('open');
+    // loadNztcsData is called from the Accept button handler below
+  } else {
+    await loadNztcsData();
+  }
+}
+
+document.getElementById('nztcsBetaAcceptBtn').addEventListener('click', async () => {
+  document.getElementById('nztcsBetaModal').classList.remove('open');
+  nztcsBetaAgreed = true;
+  localStorage.setItem(NZTCS_BETA_KEY, '1');
+  await loadNztcsData();
 });
 
 document.getElementById('modalCancel').addEventListener('click', () => { complexModal.classList.remove('open'); pendingLoad = null; });
@@ -3419,6 +3410,12 @@ runBtn.addEventListener('click', async () => {
   document.getElementById('mSpecies').textContent = species.size.toLocaleString();
   metricsGrid.style.display = 'grid';
 
+  // Detect dominant country for NZTCS activation
+  const _cc = {};
+  displayRecords.forEach(r => { if (r.countryCode) _cc[r.countryCode] = (_cc[r.countryCode] || 0) + 1; });
+  const _dominant = Object.entries(_cc).sort((a,b) => b[1]-a[1])[0]?.[0] || '';
+  maybeActivateNztcs(_dominant);
+
   buildFilterChips(displayRecords);
   buildChecklist(displayRecords);
   renderPoints(displayRecords);
@@ -3636,6 +3633,16 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     <button class="changelog-close" id="changelogClose">&#x2715;</button>
   </div>
   <div class="changelog-scroll" id="changelogScroll">
+    <div class="changelog-version">
+      <span class="changelog-version-tag">v2.64</span>
+      <span class="changelog-date">May 2026</span>
+      <ul>
+        <li>NZTCS now auto-activates for NZ searches only — no password required</li>
+        <li>Beta disclaimer popup on first use — must be accepted before NZTCS badges appear</li>
+        <li>NZTCS button hidden for non-NZ searches</li>
+        <li>Once agreed, beta disclaimer not shown again (stored in browser)</li>
+      </ul>
+    </div>
     <div class="changelog-version">
       <span class="changelog-version-tag">v2.63</span>
       <span class="changelog-date">May 2026</span>
