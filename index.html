@@ -133,6 +133,11 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 .filter-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 0.5rem; }
 .chip { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1.5px solid transparent; transition: all 0.15s; user-select: none; }
 .chip.off { opacity: 0.35; text-decoration: line-through; }
+.edna-filter-row { display:none; align-items:center; gap:6px; margin-top:7px; flex-wrap:wrap; }
+.edna-fc { font-size:10px; font-weight:600; font-family:var(--font-sans); padding:2px 8px; border-radius:10px; cursor:pointer; border:1px solid var(--border2); background:var(--surface); color:var(--text3); transition:all 0.12s; white-space:nowrap; }
+.edna-fc:hover { border-color:#16A34A; color:#16A34A; }
+.edna-fc.active { background:#16A34A; color:white; border-color:#16A34A; }
+.edna-fc[data-e="hide"].active { background:#6b7280; color:white; border-color:#6b7280; }
 
 .legend { position: absolute; bottom: 28px; right: 10px; z-index: 800; background: white; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; font-size: 12px; display: none; min-width: 140px; }
 .legend-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); margin-bottom: 6px; }
@@ -396,7 +401,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.54</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.55</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -565,6 +570,12 @@ html, body { max-width: 100vw; overflow-x: hidden; }
         <button id="selectAllChipsBtn" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--green);font-family:var(--font-sans);padding:2px 4px;border-radius:3px;font-weight:500;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Deselect all</button>
       </div>
       <div class="filter-chips" id="filterChips"></div>
+      <div class="edna-filter-row" id="ednaFilterRow">
+        <span style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);">eDNA</span>
+        <button class="edna-fc active" data-e="all">All</button>
+        <button class="edna-fc" data-e="only">eDNA only</button>
+        <button class="edna-fc" data-e="hide">Hide eDNA</button>
+      </div>
     </div>
 
     <div class="sidebar-section" id="nerdsSection" style="border-bottom:none;">
@@ -1201,6 +1212,17 @@ function collapseSetupSections() {
 }
 
 document.getElementById('clSearchInput').addEventListener('input', filterChecklistSearch);
+
+document.getElementById('ednaFilterRow').addEventListener('click', e => {
+  const btn = e.target.closest('.edna-fc');
+  if (!btn) return;
+  ednaFilter = btn.dataset.e;
+  document.querySelectorAll('.edna-fc').forEach(b => b.classList.toggle('active', b === btn));
+  if (viewMode === 'points') renderPoints(allRecords);
+  else renderHeatmap(allRecords);
+  filterChecklistByTaxon();
+  filterChecklistSearch();
+});
 document.getElementById('clCloseBtn').addEventListener('click', () => toggleChecklist());
 document.getElementById('clClearSel').addEventListener('click', () => clearSpeciesSelection());
 
@@ -1372,14 +1394,28 @@ function getTaxonGroup(r) {
 }
 function getTaxonColour(r) { return (TAXON_COLOURS[getTaxonGroup(r)] || TAXON_COLOURS['Other']).colour; }
 
+let ednaFilter = 'all'; // 'all' | 'only' | 'hide'
+
+function isEdnaRecord(r) {
+  return r.basisOfRecord === 'MATERIAL_SAMPLE' ||
+         /edna|environmental\s+dna/i.test(r.datasetName || '') ||
+         /edna|environmental\s+dna/i.test(r.samplingProtocol || '');
+}
+
 function passesFilters(r) {
-  return activeFilters.has(getTaxonGroup(r));
+  if (!activeFilters.has(getTaxonGroup(r))) return false;
+  if (ednaFilter === 'only' && !isEdnaRecord(r)) return false;
+  if (ednaFilter === 'hide' &&  isEdnaRecord(r)) return false;
+  return true;
 }
 
 function clearResults() {
   allRecords = []; activeFilters.clear(); csvData = null; selectedSpecies = null; allMarkers = []; commonNameCache = {};
   currentNztcsFilter = 'all';
+  ednaFilter = 'all';
   document.querySelectorAll('.nztcs-fc').forEach(b => b.classList.toggle('active', b.dataset.f === 'all'));
+  document.querySelectorAll('.edna-fc').forEach(b => b.classList.toggle('active', b.dataset.e === 'all'));
+  document.getElementById('ednaFilterRow').style.display = 'none';
   metricsGrid.style.display = 'none'; filterSection.style.display = 'none';
   legend.style.display = 'none'; outputSection.style.display = 'none';
   if (qualityBoxEl)  qualityBoxEl.style.display  = 'none';
@@ -2509,9 +2545,7 @@ function buildRecordPage(rec) {
       'onmouseover="this.style.opacity=\'1\'" onmouseout="this.style.opacity=\'0.75\'">\ud83d\udcf7</button>'
     : '';
   const srcLink = sourceLink(rec);
-  const isEdna  = rec.basisOfRecord === 'MATERIAL_SAMPLE' ||
-                  /edna|environmental\s+dna/i.test(rec.datasetName || '') ||
-                  /edna|environmental\s+dna/i.test(rec.samplingProtocol || '');
+  const isEdna  = isEdnaRecord(rec);
   const ednaBadge = isEdna
     ? '<span title="Environmental DNA record" style="display:inline-block;padding:1px 7px;border-radius:10px;background:#16A34A;color:#fff;font-size:10px;font-weight:700;letter-spacing:0.04em;">eDNA</span>'
     : '';
@@ -2653,9 +2687,7 @@ window._gbifSelectSpecies = function(pid, spIdx) {
         'style="background:none;border:none;cursor:pointer;font-size:13px;vertical-align:middle;padding:0 0 0 3px;line-height:1;opacity:0.75;" ' +
         'onmouseover="this.style.opacity=\'1\'" onmouseout="this.style.opacity=\'0.75\'">📷</button>';
     }
-    const isEdna = r.basisOfRecord === 'MATERIAL_SAMPLE' ||
-                   /edna|environmental\s+dna/i.test(r.datasetName || '') ||
-                   /edna|environmental\s+dna/i.test(r.samplingProtocol || '');
+    const isEdna = isEdnaRecord(r);
     const ednaBadge = isEdna ? ' <span title="Environmental DNA record" style="display:inline-block;padding:1px 6px;border-radius:10px;background:#16A34A;color:#fff;font-size:10px;font-weight:700;letter-spacing:0.04em;">eDNA</span>' : '';
     return '<div style="padding:1px 0;">' + date + link + camBtn + ednaBadge + '</div>';
   }).join('');
@@ -3100,6 +3132,10 @@ function buildFilterChips(records) {
     legendItems.appendChild(item);
   });
   filterSection.style.display = 'block'; legend.style.display = 'block';
+
+  // Show eDNA filter row only if at least one eDNA record exists
+  const ednaRow = document.getElementById('ednaFilterRow');
+  if (ednaRow) ednaRow.style.display = records.some(isEdnaRecord) ? 'flex' : 'none';
 
   syncSelectAllBtn();
   if (selectAllBtn) selectAllBtn.onclick = () => {
@@ -3615,6 +3651,13 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     <button class="changelog-close" id="changelogClose">&#x2715;</button>
   </div>
   <div class="changelog-scroll" id="changelogScroll">
+    <div class="changelog-version">
+      <span class="changelog-version-tag">v2.55</span>
+      <span class="changelog-date">May 2026</span>
+      <ul>
+        <li>eDNA filter in the taxon group panel — choose All, eDNA only, or Hide eDNA; row only appears when eDNA records are present in the results</li>
+      </ul>
+    </div>
     <div class="changelog-version">
       <span class="changelog-version-tag">v2.54</span>
       <span class="changelog-date">May 2026</span>
