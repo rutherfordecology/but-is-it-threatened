@@ -397,7 +397,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.36</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.37</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -1417,12 +1417,22 @@ function latlngsToWKT(latlngs) {
     prevLng = lng;
     coords.push([parseFloat(lng.toFixed(6)), parseFloat(lat.toFixed(6))]);
   }
-  // Strip pre-existing closing point — KML LinearRings already end with first==last,
-  // and ringWKT will add its own closure. Leaving it in creates a duplicate vertex
-  // which GBIF rejects, or produces two identical consecutive points when reversed.
-  if (coords.length > 1) {
+  // Strip all trailing closure points (KML rings already close first==last;
+  // ringWKT will add its own). Use a while loop in case there are multiple.
+  while (coords.length > 3) {
     const f = coords[0], l = coords[coords.length - 1];
     if (Math.abs(f[0] - l[0]) < 1e-9 && Math.abs(f[1] - l[1]) < 1e-9) coords.pop();
+    else break;
+  }
+  // Remove any remaining consecutive duplicate vertices (some KML exporters
+  // emit the same coordinate twice in a row, including at the very start of the ring).
+  {
+    const deduped = [coords[0]];
+    for (let i = 1; i < coords.length; i++) {
+      const p = deduped[deduped.length - 1], c = coords[i];
+      if (Math.abs(c[0] - p[0]) >= 1e-9 || Math.abs(c[1] - p[1]) >= 1e-9) deduped.push(c);
+    }
+    if (deduped.length >= 3) { coords.length = 0; deduped.forEach(c => coords.push(c)); }
   }
 
   // Shift negative-extended longitudes (+360) so crossing is expressed with
@@ -3475,6 +3485,13 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     <button class="changelog-close" id="changelogClose">&#x2715;</button>
   </div>
   <div class="changelog-scroll" id="changelogScroll">
+    <div class="changelog-version">
+      <span class="changelog-version-tag">v2.37</span>
+      <span class="changelog-date">May 2026</span>
+      <ul>
+        <li>Fixed GBIF invalid WKT for KMZ polygons — now strips all trailing closure duplicates and deduplicates any consecutive identical vertices in the ring (handles KML files that repeat the start vertex)</li>
+      </ul>
+    </div>
     <div class="changelog-version">
       <span class="changelog-version-tag">v2.36</span>
       <span class="changelog-date">May 2026</span>
