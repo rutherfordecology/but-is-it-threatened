@@ -435,6 +435,9 @@ html, body { max-width: 100vw; overflow-x: hidden; }
         <div class="browse-panel" id="browsePanel">
           <div class="browse-header" id="browseHeader"></div>
           <input type="text" class="browse-search" id="browseSearch" placeholder="Search polygons…">
+          <div id="browseAutoSelectRow" style="display:none;margin-bottom:0.4rem;">
+            <button class="browse-sel-all" id="browseAutoSelectBtn" style="color:var(--blue);font-weight:600;">&#8859; Re-select from drawn polygon</button>
+          </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
             <span style="font-size:11px;color:var(--text3);" id="browseSelCount">0 selected</span>
             <button class="browse-sel-all" id="browseSelAllBtn">Select all visible</button>
@@ -1579,6 +1582,52 @@ const browseCancelBtn= document.getElementById('browseCancelBtn');
 const browseSelCount = document.getElementById('browseSelCount');
 const browseSelAllBtn= document.getElementById('browseSelAllBtn');
 
+function autoSelectFromDrawn() {
+  if (!polygons.length) return 0;
+
+  // Pre-compute drawn polygon turf objects and their bboxes
+  const drawnTurf = [], drawnBboxes = [];
+  polygons.forEach(dp => {
+    try {
+      const coords = closeRingCoords(dp.latlngs.map(llToGeoJSON));
+      const tp = turf.polygon([coords]);
+      drawnTurf.push(tp);
+      drawnBboxes.push(turf.bbox(tp)); // [minLng, minLat, maxLng, maxLat]
+    } catch(e) {}
+  });
+  if (!drawnTurf.length) return 0;
+
+  let count = 0;
+  browsePolygons.forEach((bp, i) => {
+    try {
+      // Quick bbox pre-filter — latlngs are [lat, lng] arrays
+      const lats = bp.latlngs.map(ll => ll[0]);
+      const lngs = bp.latlngs.map(ll => ll[1]);
+      const bb = [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+      const candidates = drawnTurf.filter((_, j) => {
+        const db = drawnBboxes[j];
+        return bb[2] >= db[0] && bb[0] <= db[2] && bb[3] >= db[1] && bb[1] <= db[3];
+      });
+      if (!candidates.length) return;
+
+      // Full intersection only for bbox candidates
+      const coords = closeRingCoords(bp.latlngs.map(llToGeoJSON));
+      const tp = turf.polygon([coords]);
+      const hits = candidates.some(dt => turf.booleanIntersects(tp, dt));
+      const wasSelected = bp.selected;
+      bp.selected = hits;
+      if (hits !== wasSelected) {
+        bp.layer.setStyle(hits
+          ? { color: '#2a7a58', fillColor: '#2a7a58', fillOpacity: 0.2, weight: 2 }
+          : { color: '#6b7280', fillColor: '#6b7280', fillOpacity: 0.06, weight: 1 }
+        );
+      }
+      if (hits) count++;
+    } catch(e) {}
+  });
+  return count;
+}
+
 function enterBrowseMode(polys) {
   exitBrowseMode();
   browsePolygons = polys.map(p => ({ name: p.name, latlngs: p.latlngs, selected: false, layer: null }));
@@ -1595,18 +1644,41 @@ function enterBrowseMode(polys) {
 
   if (browseLayer.getLayers().length) map.fitBounds(browseLayer.getBounds(), { padding: [30, 30] });
 
-  browseHeader.textContent = polys.length.toLocaleString() + ' polygons loaded — click on the map or the list to select, then click Add.';
   browseSearch.value = '';
   browseSelAllBtn.textContent = 'Select all visible';
-  renderBrowseList('');
-  updateBrowseSelCount();
+
   const browseIntersectRow = document.getElementById('browseIntersectRow');
   const browseIntersectCb  = document.getElementById('browseIntersectCb');
+  const browseAutoSelectRow = document.getElementById('browseAutoSelectRow');
   browseIntersectRow.style.display = 'block';
   browseIntersectCb.checked = false;
+
+  // Auto-select polygons that overlap the drawn area
+  let autoCount = 0;
+  if (polygons.length > 0) {
+    browseAutoSelectRow.style.display = 'block';
+    autoCount = autoSelectFromDrawn();
+    browseIntersectCb.checked = true; // default to clipping since a drawn polygon exists
+  } else {
+    browseAutoSelectRow.style.display = 'none';
+  }
+
+  renderBrowseList('');
+  updateBrowseSelCount();
+
+  if (autoCount > 0) {
+    browseHeader.textContent = polys.length.toLocaleString() + ' polygons loaded — ' + autoCount.toLocaleString() + ' overlap your drawn area and are pre-selected.';
+    setStatus(autoCount.toLocaleString() + ' polygons overlap your drawn area. Review the selection then click Add.', 'info');
+  } else if (polygons.length > 0) {
+    browseHeader.textContent = polys.length.toLocaleString() + ' polygons loaded — none overlap your drawn area.';
+    setStatus('No polygons from the file overlap your drawn area. Try a different area or select manually.', 'warning');
+  } else {
+    browseHeader.textContent = polys.length.toLocaleString() + ' polygons loaded — click on the map or the list to select, then click Add.';
+    setStatus('Browse mode: select the polygons you want to query, then click Add.', 'info');
+  }
+
   browsePanel.style.display = 'block';
   dropZone.style.display = 'none';
-  setStatus('Browse mode: select the polygons you want to query, then click Add.', 'info');
 }
 
 function exitBrowseMode() {
@@ -1726,6 +1798,13 @@ browseAddBtn.addEventListener('click', () => {
 });
 
 browseCancelBtn.addEventListener('click', exitBrowseMode);
+
+document.getElementById('browseAutoSelectBtn').addEventListener('click', () => {
+  const count = autoSelectFromDrawn();
+  renderBrowseList(browseSearch.value);
+  updateBrowseSelCount();
+  setStatus(count.toLocaleString() + ' polygon' + (count === 1 ? '' : 's') + ' overlap your drawn area.', 'info');
+});
 
 // Modals
 // About modal
