@@ -145,8 +145,10 @@ header { background: var(--green-dark); color: white; padding: 0 1.5rem; display
 .checklist-panel.open { transform: translateX(0); }
 .cl-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface2); }
 .cl-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); }
-.cl-close { cursor: pointer; font-size: 18px; color: var(--text3); line-height: 1; padding: 2px 5px; border-radius: 4px; border: none; background: none; }
-.cl-close:hover { color: var(--red); background: var(--red-light); }
+.cl-close { cursor: pointer; font-size: 20px; color: var(--text3); line-height: 1; padding: 2px 6px; border-radius: 4px; border: none; background: none; }
+.cl-close:hover { color: var(--text); background: var(--surface2); }
+#clOpenTab { position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 899; background: var(--surface); border: 1px solid var(--border); border-right: none; border-radius: 6px 0 0 6px; padding: 14px 5px; cursor: pointer; display: none; box-shadow: -2px 0 8px rgba(0,0,0,0.08); writing-mode: vertical-rl; text-orientation: mixed; transform: translateY(-50%) rotate(180deg); font-size: 11px; font-weight: 600; color: var(--text2); letter-spacing: 0.06em; text-transform: uppercase; font-family: var(--font-sans); white-space: nowrap; }
+#clOpenTab:hover { background: var(--surface2); color: var(--text); }
 .cl-selected-info { padding: 6px 10px; font-size: 11px; background: var(--green-light); color: var(--green-dark); border-bottom: 1px solid var(--green-mid); display: none; }
 .cl-clear-sel { cursor: pointer; text-decoration: underline; margin-left: 6px; }
 .cl-search { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -398,7 +400,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.77</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.78</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -549,7 +551,6 @@ html, body { max-width: 100vw; overflow-x: hidden; }
 
         <div class="tool-row" style="margin-top:0.6rem;">
           <button class="tool-btn active" id="btnPoints" onclick="setViewMode('points')">Points</button>
-          <button class="tool-btn" id="btnChecklist" onclick="toggleChecklist()">Species checklist</button>
         </div>
         <div class="tool-row" style="margin-top:0.4rem;">
           <button class="tool-btn" id="btnHeat" onclick="setViewMode('heat')">Heatmap</button>
@@ -610,12 +611,14 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <button id="cancelDrawBtn">&#x2715; Cancel</button>
     </div>
 
+    <button id="clOpenTab" title="Show species checklist" onclick="toggleChecklist()">Checklist</button>
+
     <div class="checklist-panel" id="checklistPanel">
       <div class="cl-header">
         <span class="cl-title">Species checklist</span>
         <div style="display:flex;align-items:center;gap:6px;margin-right:36px;">
           <button class="cl-nztcs-btn" id="clNztcsBtn" title="Click to activate NZTCS conservation status" style="display:none;">🔒 NZTCS</button>
-<button class="cl-close" id="clCloseBtn">&#x2715;</button>
+<button class="cl-close" id="clCloseBtn" title="Minimise checklist">&#x203A;</button>
         </div>
       </div>
       <div class="cl-selected-info" id="clSelectedInfo">
@@ -1410,8 +1413,7 @@ function clearResults() {
   statusBar.style.display = 'none'; progressWrap.style.display = 'none';
   progressTrack.querySelectorAll('.progress-footprint').forEach(fp => fp.classList.remove('visible'));
   checklistPanel.classList.remove('open');
-  document.getElementById('btnChecklist').textContent = 'Species checklist';
-  document.getElementById('btnChecklist').classList.remove('active');
+  document.getElementById('clOpenTab').style.display = 'none';
   clScroll.innerHTML = ''; clSelectedInfo.style.display = 'none';
   const _clf = document.getElementById('clFooter'); if (_clf) _clf.style.display = 'none';
   if (clusterLayer) { map.removeLayer(clusterLayer); clusterLayer = null; }
@@ -3045,8 +3047,7 @@ function clearSpeciesSelection() {
 // Checklist
 function toggleChecklist() {
   const isOpen = checklistPanel.classList.toggle('open');
-  document.getElementById('btnChecklist').textContent = isOpen ? 'Hide checklist' : 'Species checklist';
-  document.getElementById('btnChecklist').classList.toggle('active', isOpen);
+  document.getElementById('clOpenTab').style.display = isOpen ? 'none' : '';
 }
 
 function filterChecklistSearch() {
@@ -3503,6 +3504,8 @@ runBtn.addEventListener('click', async () => {
 
   buildFilterChips(displayRecords);
   buildChecklist(displayRecords);
+  checklistPanel.classList.add('open');
+  document.getElementById('clOpenTab').style.display = 'none';
   renderPoints(displayRecords);
   setTimeout(() => { map.invalidateSize(); }, 100);
   csvData = buildCSV(displayRecords);
@@ -3718,6 +3721,13 @@ document.getElementById('dlChecklistBtn').addEventListener('click', () => {
     <button class="changelog-close" id="changelogClose">&#x2715;</button>
   </div>
   <div class="changelog-scroll" id="changelogScroll">
+    <div class="changelog-version">
+      <span class="changelog-version-tag">v2.78</span>
+      <span class="changelog-date">May 2026</span>
+      <ul>
+        <li>Checklist opens automatically after each fetch — removed the manual toggle button; minimise with › and restore via the Checklist tab on the right edge of the map</li>
+      </ul>
+    </div>
     <div class="changelog-version">
       <span class="changelog-version-tag">v2.77</span>
       <span class="changelog-date">May 2026</span>
