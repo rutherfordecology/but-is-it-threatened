@@ -399,7 +399,7 @@ html, body { max-width: 100vw; overflow-x: hidden; }
       <img src="occurd-logo.png" alt="occurd." style="height:44px;width:auto;filter:brightness(0) invert(1);opacity:0.95;">
     </div>
     <span style="font-size:12px;font-weight:300;color:rgba(255,255,255,0.45);">by</span>
-    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.84</span></h1>
+    <h1><a href="https://sites.google.com/view/rutherford-ecology/home" target="_blank"><strong>Rutherford</strong> <em>ecology</em></a> <span style="font-size:10px;font-weight:400;color:rgba(255,255,255,0.35);letter-spacing:0.04em;">v2.85</span></h1>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button class="about-btn" id="aboutBtn">&#9432; About</button>
@@ -500,10 +500,10 @@ html, body { max-width: 100vw; overflow-x: hidden; }
             <label class="taxon-item"><input type="checkbox" value="angiosperms" class="taxon-cb"> Angiosperms</label>
             <label class="taxon-item"><input type="checkbox" value="194" class="taxon-cb"> Gymnosperms</label>
             <label class="taxon-item"><input type="checkbox" value="7228684" class="taxon-cb"> Ferns &amp; allies</label>
-            <label class="taxon-item"><input type="checkbox" value="311" class="taxon-cb"> Bryophytes</label>
+            <label class="taxon-item"><input type="checkbox" value="bryophytes" class="taxon-cb"> Bryophytes</label>
             <div class="taxon-group-label">Other</div>
             <label class="taxon-item"><input type="checkbox" value="algae" class="taxon-cb"> Algae</label>
-            <label class="taxon-item"><input type="checkbox" value="4" class="taxon-cb"> Fungi</label>
+            <label class="taxon-item"><input type="checkbox" value="5" class="taxon-cb"> Fungi</label>
           </div>
         </div>
       </div>
@@ -807,8 +807,8 @@ const CB_TO_GROUP = {
   '216': 'Insecta', '367': 'Arachnida', 'crustacea': 'Crustacea',
   '52': 'Mollusca', '50': 'Echinodermata', '43': 'Cnidaria', '42': 'Annelida',
   '1': 'Other',
-  'angiosperms': 'Angiosperms', '194': 'Gymnosperms', '7228684': 'Ferns', '311': 'Bryophytes',
-  'algae': 'Algae', '4': 'Fungi',
+  'angiosperms': 'Angiosperms', '194': 'Gymnosperms', '7228684': 'Ferns', 'bryophytes': 'Bryophytes',
+  'algae': 'Algae', '5': 'Fungi',
 };
 
 // Map
@@ -3264,9 +3264,10 @@ function buildTaxonParams(keys) {
   keys.forEach(key => {
     if (key === 'fish')           { params.push(['taxonKey', '44']); } // Chordata, post-filter to fish orders
     else if (key === 'reptilia')    { ['11592253','11418114','11493978','11569602'].forEach(k => params.push(['taxonKey', k])); } // Squamata, Testudines, Crocodylia, Sphenodontia (GBIF retired Reptilia key 358 in CoL 2022)
-    else if (key === 'crustacea')   { ['229','203','284','367'].forEach(k => params.push(['taxonKey', k])); }
-    else if (key === 'angiosperms') { ['220','162846864'].forEach(k => params.push(['taxonKey', k])); }
-    else if (key === 'algae')       { ['4','3241496','3153'].forEach(k => params.push(['taxonKey', k])); }
+    else if (key === 'bryophytes')  { ['35','9','13'].forEach(k => params.push(['taxonKey', k])); }  // Bryophyta, Marchantiophyta (liverworts), Anthocerotophyta (hornworts)
+    else if (key === 'crustacea')   { ['229','203','281','353'].forEach(k => params.push(['taxonKey', k])); } // Malacostraca, Maxillopoda, Branchiopoda, Ostracoda
+    else if (key === 'angiosperms') { ['220','196'].forEach(k => params.push(['taxonKey', k])); } // Magnoliopsida (dicots), Liliopsida (monocots)
+    else if (key === 'algae')       { ['36','106','98','7819616','68'].forEach(k => params.push(['taxonKey', k])); } // Chlorophyta, Rhodophyta, Ochrophyta, Charophyta, Cyanobacteria
     else if (key === '1')           { params.push(['kingdomKey', '1']); }
     else                            { params.push(['taxonKey', key]); }
   });
