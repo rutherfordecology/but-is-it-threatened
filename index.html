@@ -313,7 +313,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.27</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.28</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -356,7 +356,8 @@
 const NZOR = 'https://data.nzor.org.nz/v1';
 
 let nztcs          = null;   // nztcs_slim.json: lowercase-name → {s,c,y,...}
-let nztcsStripped    = null;   // author-stripped keys: "genus species subsp" → entry
+let nztcsStripped      = null;   // author-stripped keys: "genus species subsp" → entry
+let nztcsStrippedAmbig = null;   // set of stripped keys where 2+ NZTCS entries map to the same stripped name
 let nztcsSubspecies  = null;   // "genus species" → [all subspecies sorted most→least threatened]
 let nppa           = null;   // nppa.json: Set of lowercase scientific names
 let nzorIndex      = [];     // sorted search index built from nzor_names.json
@@ -390,13 +391,13 @@ function nztcsFor(...names) {
     if (!n) continue;
     const k = norm(n);
     if (nztcs[k]) return nztcs[k];
-    if (nztcsStripped?.[k]) return { ...nztcsStripped[k], _uncertain: true };
+    if (nztcsStripped?.[k]) return { ...nztcsStripped[k], _uncertain: nztcsStrippedAmbig.has(k) };
     if (nztcsSubspecies?.[k]?.length) return { _subspeciesList: true, list: nztcsSubspecies[k], best: nztcsSubspecies[k][0] };
     // For subspecies-level names (3+ words), also try genus+species fallback
     const parts = k.split(' ');
     if (parts.length >= 3) {
       const sp = parts[0] + ' ' + parts[1];
-      if (nztcsStripped?.[sp]) return { ...nztcsStripped[sp], _uncertain: true };
+      if (nztcsStripped?.[sp]) return { ...nztcsStripped[sp], _uncertain: nztcsStrippedAmbig.has(sp) };
       if (nztcsSubspecies?.[sp]?.length) return { _subspeciesList: true, list: nztcsSubspecies[sp], best: nztcsSubspecies[sp][0] };
     }
   }
@@ -454,13 +455,18 @@ Promise.all([
   // NZTCS keys use two authority formats: "(author, year)" and bare "author, year"
   // or "author & author, year" — strip both.
   nztcsStripped = {};
+  nztcsStrippedAmbig = new Set();
   for (const [key, val] of Object.entries(nztcsData)) {
     const stripped = key
       .replace(/\s*\([^)]+\)\s*$/, '')                          // strip trailing (author, year)
       .replace(/\s+[a-z]+(?:\s+&\s+[a-z]+)?,\s*\d{4}\s*$/, '') // strip author, year  or  author & author, year
       .trim();
-    if (stripped !== key && !nztcsStripped[stripped]) {
-      nztcsStripped[stripped] = val;
+    if (stripped !== key) {
+      if (nztcsStripped[stripped]) {
+        nztcsStrippedAmbig.add(stripped); // 2+ entries strip to the same name — flag as uncertain
+      } else {
+        nztcsStripped[stripped] = val;
+      }
     }
   }
   // Build subspecies list map: "genus species" → [all subspecies sorted most→least threatened]
@@ -519,17 +525,28 @@ function buildIndex(d) {
   for (const [key, val] of Object.entries(d)) {
     nzorIndex.push({ key, kd: normDia(key), ...val });
   }
-  // Add NZTCS common + Māori names that aren't already in the NZOR index
+  // Add NZTCS common + Māori names. NZTCS takes priority: if NZOR already has
+  // a vernacular entry for the same name but linking to a different species, replace it.
   if (nztcs) {
-    const existing = new Set(nzorIndex.map(x => x.key));
+    const indexByKey = new Map(nzorIndex.map((x, i) => [x.key, i]));
     for (const [nztcsKey, val] of Object.entries(nztcs)) {
       const sciName = val.n || capFirst(nztcsKey);
       for (const cn of [val.cn, val.mn]) {
         if (!cn) continue;
         const key = norm(cn);
-        if (!key || existing.has(key)) continue;
-        existing.add(key);
-        nzorIndex.push({ key, kd: normDia(key), n: cn, cls: 'v', sci: sciName });
+        if (!key) continue;
+        const newEntry = { key, kd: normDia(key), n: cn, cls: 'v', sci: sciName };
+        if (indexByKey.has(key)) {
+          const idx = indexByKey.get(key);
+          const cur = nzorIndex[idx];
+          // Only override if existing is a vernacular pointing to a different species
+          if (cur.cls === 'v' && norm(cur.sci || '') !== norm(sciName)) {
+            nzorIndex[idx] = newEntry;
+          }
+        } else {
+          indexByKey.set(key, nzorIndex.length);
+          nzorIndex.push(newEntry);
+        }
       }
     }
   }
@@ -929,7 +946,8 @@ function batchMatch(rawName) {
   const common   = sciEntry?.cn || eff?.cn || '';
   const maori    = sciEntry?.mn || eff?.mn || '';
 
-  const exoticFromNztcs = (eff?.c || '').toLowerCase().includes('introduced');
+  const categoryLower = (eff?.c || '').toLowerCase();
+  const exoticFromNztcs = categoryLower.includes('introduced') || categoryLower.includes('naturalised');
   const origin = pest || exoticFromNztcs ? 'Exotic' : 'Unknown';
 
   return {
