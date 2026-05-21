@@ -251,22 +251,26 @@
 <script>
 const NZOR = 'https://data.nzor.org.nz/v1';
 
-let nztcs = null;          // slim lookup: lowercase-name → {s,c,y,cn?,mn?}
-let vernacIndex = [];      // [{key, displayName, cn, mn, s, c, y}] — vernacular-searchable entries
-let nzorResults = [];      // last NZOR API results
-let vernacResults = [];    // last vernacular search results
+let nztcs = null;          // slim lookup: lowercase-name → {s,c,y,n,cn?,mn?}
+let vernacIndex = [];      // vernacular-searchable entries (have cn or mn)
+let sciIndex   = [];       // canonical scientific name entries, sorted a-z
+let nzorResults  = [];     // last NZOR API results
+let vernacResults = [];    // last NZTCS vernacular search results
+let sciResults    = [];    // last NZTCS scientific name search results
 let activeIdx = -1;
-let allItems = [];         // flattened ordered list for keyboard nav
+let allItems = [];
 let debounce;
 
 // ── Load NZTCS ───────────────────────────────────────────────────────────────
 const dot = document.getElementById('dot');
 
-fetch('nztcs_slim.json')
+const weekStamp = Math.floor(Date.now() / 6048e5); // changes every 7 days
+fetch(`nztcs_slim.json?v=${weekStamp}`)
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(d => {
     nztcs = d;
     buildVernacIndex(d);
+    buildSciIndex(d);
     dot.className = 'status-dot';
     dot.title = `NZTCS loaded — ${Object.keys(d).length.toLocaleString()} entries`;
   })
@@ -276,8 +280,6 @@ fetch('nztcs_slim.json')
   });
 
 function buildVernacIndex(d) {
-  // One entry per unique scientific name that has a common or Māori name.
-  // Keys in nztcs are lowercase scientific names; we keep the first one seen per name.
   const seen = new Set();
   for (const [key, val] of Object.entries(d)) {
     if (!val.cn && !val.mn) continue;
@@ -285,6 +287,27 @@ function buildVernacIndex(d) {
     seen.add(key);
     vernacIndex.push({ key, ...val });
   }
+}
+
+function buildSciIndex(d) {
+  // Canonical entries only (key matches the normalised canonical name)
+  for (const [key, val] of Object.entries(d)) {
+    if (val.n && norm(val.n) === key) sciIndex.push({ key, ...val });
+  }
+  sciIndex.sort((a, b) => a.key < b.key ? -1 : 1);
+}
+
+// ── Scientific name search (client-side, prefix match on NZTCS keys) ─────────
+function sciSearch(q) {
+  if (!sciIndex.length || q.length < 2) return [];
+  const qn = norm(q);
+  const results = [];
+  for (const item of sciIndex) {
+    if (item.key > qn + '￿') break;
+    if (item.key.startsWith(qn)) results.push(item);
+    if (results.length >= 10) break;
+  }
+  return results;
 }
 
 // ── Normalisation ─────────────────────────────────────────────────────────────
@@ -375,11 +398,11 @@ input.addEventListener('input', () => {
   const q = input.value.trim();
   if (!q) { hideSug(); return; }
 
-  // Show vernacular matches immediately (sync), then NZOR when it arrives
-  const vr = vernacSearch(q);
-  vernacResults = vr;
-  nzorResults = [];
-  renderDropdown([], vr, true);   // true = loading indicator for NZOR
+  // Show client-side matches immediately, then NZOR when it arrives
+  sciResults   = sciSearch(q);
+  vernacResults = vernacSearch(q);
+  nzorResults  = [];
+  renderDropdown([], sciResults, vernacResults, true);
 
   debounce = setTimeout(() => doNzorSearch(q), 300);
 });
@@ -406,20 +429,21 @@ async function doNzorSearch(q) {
     if (!r.ok) throw new Error(r.statusText);
     const data = await r.json();
     nzorResults = data.results || [];
-    renderDropdown(nzorResults, vernacResults, false);
+    renderDropdown(nzorResults, sciResults, vernacResults, false);
   } catch(e) {
     nzorResults = [];
-    renderDropdown([], vernacResults, false);
+    renderDropdown([], sciResults, vernacResults, false);
   }
 }
 
 // ── Render dropdown ───────────────────────────────────────────────────────────
-function renderDropdown(nzor, vernac, nzorLoading) {
-  // Deduplicate vernacular results against NZOR results
+function renderDropdown(nzor, sci, vernac, nzorLoading) {
+  // Deduplicate client-side results against NZOR results (NZOR takes precedence)
   const nzorNames = new Set(nzor.map(r => norm(r.name.partialName)));
+  const uniqueSci    = sci.filter(v => !nzorNames.has(v.key));
   const uniqueVernac = vernac.filter(v => !nzorNames.has(v.key));
 
-  if (!nzor.length && !uniqueVernac.length && !nzorLoading) {
+  if (!nzor.length && !uniqueSci.length && !uniqueVernac.length && !nzorLoading) {
     sugBox.innerHTML = `<div class="msg">No results found</div>`;
     sugBox.hidden = false;
     allItems = [];
@@ -472,6 +496,19 @@ function renderDropdown(nzor, vernac, nzorLoading) {
 
   if (nzorLoading) {
     html += `<div class="spinner"><div class="spin-icon"></div>Searching NZOR…</div>`;
+  }
+
+  // NZTCS scientific name matches (client-side fallback when NZOR hasn't returned yet or is unavailable)
+  if (uniqueSci.length) {
+    html += `<div class="section-sep">Scientific names</div>`;
+    uniqueSci.forEach(v => {
+      const isPref = true; // sciIndex contains only canonical entries
+      html += `<div class="suggestion" data-i="${allItems.length}" role="option">
+        <span class="sname"><strong>${escHtml(capFirst(v.key))}</strong></span>
+        ${badgeHtml(v)}
+      </div>`;
+      allItems.push({ type: 'vernac', vernacItem: v });
+    });
   }
 
   // NZTCS vernacular-only results (names not already returned by NZOR)
