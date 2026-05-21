@@ -369,7 +369,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.31</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.32</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -390,7 +390,7 @@
       <div id="suggestions" hidden role="listbox"></div>
     </div>
     <div id="detail" hidden></div>
-    <p class="hint" id="hint">Search across all NZ organism names in NZOR, with conservation status from NZTCS.</p>
+    <p class="hint" id="hint">Search by scientific name, common name, Māori name, synonym, or NVS 6-letter code — with conservation status from NZTCS.</p>
 
     <details class="nerd-notes" id="nerd-notes">
       <summary>Nerd notes</summary>
@@ -423,6 +423,9 @@
 
         <h3>Names shared by more than one species</h3>
         <p>When loading, the tool checks every common name and Māori name to see how many different species use it. If two or more species share a name, it is flagged as ambiguous. This is common in NZ — <em>tītī</em> refers to several petrel and shearwater species, <em>puka</em> is used for both <em>Griselinia lucida</em> and <em>Meryta sinclairii</em>, and <em>mingimingi</em> applies to several shrub species across <em>Coprosma</em>, <em>Leucopogon</em>, and others. When a name is ambiguous, all the species that share it are listed rather than guessing.</p>
+
+        <h3>NVS 6-letter codes</h3>
+        <p>The tool also accepts NVS (National Vegetation Survey) codes — the 6-letter shorthand used by ecologists in the field, typically the first 3 letters of the genus and first 3 of the species (e.g. <strong>PODTOT</strong> for <em>Podocarpus totara</em>, <strong>LEPSCO</strong> for <em>Leptospermum scoparium</em>). There are 8,259 codes loaded from the NVS Databank. Old or synonym codes are recognised and redirected to the current preferred name. NVS codes work in both the search box and batch lookup.</p>
 
         <h3>Remaining limitations</h3>
         <p><strong>Native/exotic is only available when online.</strong> Whether a species is native or exotic comes from the NZOR website in real time. In batch mode this is not fetched, so most batch results show "Unknown" for origin. Species flagged as introduced or naturalised in NZTCS, or listed on the NPPA, will still show as Exotic.</p>
