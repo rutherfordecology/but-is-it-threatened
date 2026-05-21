@@ -302,7 +302,10 @@
     .ambig-list   { display:flex; flex-direction:column; gap:.5rem; margin-top:.6rem; }
     .ambig-card   { background:#f9f9f9; border:1px solid #e0e0e0; border-radius:6px; padding:.6rem .75rem; }
     .ambig-sci    { font-weight:500; margin-bottom:.15rem; }
-    .ambig-names  { font-size:.8rem; color:#666; margin-bottom:.25rem; }
+    .ambig-names     { font-size:.8rem; color:#666; margin-bottom:.25rem; }
+    .subsp-best      { outline:2px solid currentColor; outline-offset:-2px; }
+    .subsp-best-tag  { font-size:.7rem; opacity:.75; margin-left:auto; }
+    .subsp-best-note { font-size:.75rem; color:#888; margin-left:.3rem; }
     .results-table em { font-style:italic; }
   </style>
 </head>
@@ -310,7 +313,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.26</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.27</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -353,8 +356,8 @@
 const NZOR = 'https://data.nzor.org.nz/v1';
 
 let nztcs          = null;   // nztcs_slim.json: lowercase-name → {s,c,y,...}
-let nztcsStripped  = null;   // author-stripped keys: "genus species subsp" → entry
-let nztcsSpecies   = null;   // species-level fallback: "genus species" → most threatened entry
+let nztcsStripped    = null;   // author-stripped keys: "genus species subsp" → entry
+let nztcsSubspecies  = null;   // "genus species" → [all subspecies sorted most→least threatened]
 let nppa           = null;   // nppa.json: Set of lowercase scientific names
 let nzorIndex      = [];     // sorted search index built from nzor_names.json
 let ambiguousNames = null;   // vernacular key → [{sci, id?}] when 2+ species share the name
@@ -377,7 +380,9 @@ function catClass(cat) {
 }
 function badgeHtml(entry) {
   if (!entry) return '';
-  return `<span class="badge ${catClass(entry.c)}">${escHtml(entry.s || entry.c)}</span>`;
+  const e = entry._subspeciesList ? entry.best : entry;
+  if (!e?.s) return '';
+  return `<span class="badge ${catClass(e.c)}">${escHtml(e.s || e.c)}</span>`;
 }
 function nztcsFor(...names) {
   if (!nztcs) return null;
@@ -386,13 +391,13 @@ function nztcsFor(...names) {
     const k = norm(n);
     if (nztcs[k]) return nztcs[k];
     if (nztcsStripped?.[k]) return { ...nztcsStripped[k], _uncertain: true };
-    if (nztcsSpecies?.[k]) return nztcsSpecies[k];
+    if (nztcsSubspecies?.[k]?.length) return { _subspeciesList: true, list: nztcsSubspecies[k], best: nztcsSubspecies[k][0] };
     // For subspecies-level names (3+ words), also try genus+species fallback
     const parts = k.split(' ');
     if (parts.length >= 3) {
       const sp = parts[0] + ' ' + parts[1];
       if (nztcsStripped?.[sp]) return { ...nztcsStripped[sp], _uncertain: true };
-      if (nztcsSpecies?.[sp]) return nztcsSpecies[sp];
+      if (nztcsSubspecies?.[sp]?.length) return { _subspeciesList: true, list: nztcsSubspecies[sp], best: nztcsSubspecies[sp][0] };
     }
   }
   return null;
@@ -445,16 +450,6 @@ Promise.all([
     if (t.includes('extinct'))               return 1;
     return 0;
   };
-  nztcsSpecies = {};
-  for (const [key, val] of Object.entries(nztcsData)) {
-    const parts = key.split(' ');
-    if (parts.length >= 3) {
-      const sp = parts[0] + ' ' + parts[1];
-      if (!nztcsSpecies[sp] || threatRank(val.s) > threatRank(nztcsSpecies[sp].s)) {
-        nztcsSpecies[sp] = { ...val, _subspecies: true };
-      }
-    }
-  }
   // Build author-stripped map: "genus species subsp" (no author) → entry
   // NZTCS keys use two authority formats: "(author, year)" and bare "author, year"
   // or "author & author, year" — strip both.
@@ -467,6 +462,24 @@ Promise.all([
     if (stripped !== key && !nztcsStripped[stripped]) {
       nztcsStripped[stripped] = val;
     }
+  }
+  // Build subspecies list map: "genus species" → [all subspecies sorted most→least threatened]
+  nztcsSubspecies = {};
+  for (const [key, val] of Object.entries(nztcsData)) {
+    const stripped = key
+      .replace(/\s*\([^)]+\)\s*$/, '')
+      .replace(/\s+[a-z]+(?:\s+&\s+[a-z]+)?,\s*\d{4}\s*$/, '')
+      .trim();
+    const parts = stripped.split(' ');
+    if (parts.length >= 3) {
+      const sp = parts[0] + ' ' + parts[1];
+      if (!nztcsSubspecies[sp]) nztcsSubspecies[sp] = [];
+      if (!nztcsSubspecies[sp].some(x => x.n === val.n))
+        nztcsSubspecies[sp].push(val);
+    }
+  }
+  for (const sp of Object.keys(nztcsSubspecies)) {
+    nztcsSubspecies[sp].sort((a, b) => threatRank(b.s) - threatRank(a.s));
   }
   // Build ambiguous vernacular names map: key → [{sci, id?}] for names shared by 2+ species
   const vernacCollect = new Map();
@@ -790,13 +803,35 @@ function showAmbiguousDetail(item) {
 
 // ── NZTCS detail block ────────────────────────────────────────────────────────
 function nztcsBlock(entry) {
-  if (!entry || !entry.s) {
+  if (!entry) {
+    return `<div class="dl-title">NZ Threat Classification</div>
+            <div style="font-size:.85rem;color:#aaa;padding:.4rem 0">Not listed in NZTCS</div>`;
+  }
+  // Subspecies list fallback — show all subspecies, highlight most threatened
+  if (entry._subspeciesList) {
+    const rows = entry.list.map((sub, i) => {
+      const cls = catClass(sub.c);
+      const isBest = i === 0;
+      return `<div class="nztcs-box ${cls} ${isBest ? 'subsp-best' : ''}" style="margin-bottom:.4rem">
+        <div class="nztcs-header">
+          <span class="nztcs-label">NZTCS</span>
+          ${sub.y ? `<span class="nztcs-year">${sub.y}</span>` : ''}
+          ${isBest ? `<span class="subsp-best-tag">most threatened ↑</span>` : ''}
+        </div>
+        <div class="nztcs-status">${escHtml(sub.s)}</div>
+        <div class="nztcs-cat">${escHtml(sub.c || '')}</div>
+        <div style="font-size:.75rem;opacity:.7;margin-top:.2rem"><em>${escHtml(sub.n || '')}</em></div>
+      </div>`;
+    }).join('');
+    return `<div class="dl-title">NZ Threat Classification</div>
+      <div style="font-size:.8rem;color:#888;margin:.3rem 0 .6rem">Not listed at species level — subspecies in NZTCS:</div>
+      ${rows}`;
+  }
+  if (!entry.s) {
     return `<div class="dl-title">NZ Threat Classification</div>
             <div style="font-size:.85rem;color:#aaa;padding:.4rem 0">Not listed in NZTCS</div>`;
   }
   const cls = catClass(entry.c);
-  const subNote = entry._subspecies
-    ? `<div style="font-size:.75rem;opacity:.7;margin-top:.3rem">Most threatened subspecies: <em>${escHtml(entry.n || '')}</em></div>` : '';
   const uncertainNote = entry._uncertain
     ? `<div style="font-size:.75rem;opacity:.7;margin-top:.3rem">* might be wrong</div>` : '';
   return `<div class="dl-title">NZ Threat Classification</div>
@@ -807,7 +842,6 @@ function nztcsBlock(entry) {
       </div>
       <div class="nztcs-status">${escHtml(entry.s)}${entry._uncertain ? ' *' : ''}</div>
       <div class="nztcs-cat">${escHtml(entry.c || '')}</div>
-      ${subNote}
       ${uncertainNote}
     </div>`;
 }
@@ -887,12 +921,15 @@ function batchMatch(rawName) {
   const nztcsEntry = nztcsFor(sciName, item.key);
   const pest       = isPestPlant(sciName, item.key);
 
+  // Subspecies list fallback — use best entry for batch but flag it
+  const eff = nztcsEntry?._subspeciesList ? { ...nztcsEntry.best, _subspeciesBest: true } : nztcsEntry;
+
   // Common + Māori: prefer NZTCS entry for the canonical sci name
   const sciEntry = sciName ? nztcs?.[norm(sciName)] : null;
-  const common   = sciEntry?.cn || nztcsEntry?.cn || '';
-  const maori    = sciEntry?.mn || nztcsEntry?.mn || '';
+  const common   = sciEntry?.cn || eff?.cn || '';
+  const maori    = sciEntry?.mn || eff?.mn || '';
 
-  const exoticFromNztcs = (nztcsEntry?.c || '').toLowerCase().includes('introduced');
+  const exoticFromNztcs = (eff?.c || '').toLowerCase().includes('introduced');
   const origin = pest || exoticFromNztcs ? 'Exotic' : 'Unknown';
 
   return {
@@ -901,9 +938,10 @@ function batchMatch(rawName) {
     sci:      sciName || '',
     common,
     maori,
-    status:   nztcsEntry?.s || '',
-    category: nztcsEntry?.c || '',
-    year:     nztcsEntry?.y || '',
+    status:        eff?.s || '',
+    category:      eff?.c || '',
+    year:          eff?.y || '',
+    _subspeciesBest: eff?._subspeciesBest || false,
     pest:     pest ? 'Yes' : '',
     origin,
   };
@@ -950,7 +988,7 @@ function renderBatchTable(results) {
     }
     const pestCell = r.pest ? `<span class="badge cat-pest-plant">Pest plant</span>` : '';
     const statusCell = r.status
-      ? `<span class="badge ${catClass(r.category)}">${escHtml(r.status)}</span>`
+      ? `<span class="badge ${catClass(r.category)}">${escHtml(r.status)}</span>${r._subspeciesBest ? ' <span class="subsp-best-note">most threatened subspecies</span>' : ''}`
       : '<span style="color:#bbb">—</span>';
     return `<tr>
       <td>${escHtml(r.input)}</td>
@@ -980,7 +1018,7 @@ function downloadBatchCSV() {
   const csvRows = [header, ...batchResults.map(r => {
     if (!r.matched) return [r.input, 'No match', '', '', '', '', '', '', ''];
     if (r._ambiguous) return [r.input, 'Ambiguous — could be: ' + r.sci, '', '', '', '', '', '', ''];
-    return [r.input, r.sci, r.common, r.maori, r.status, r.category, r.year, r.pest, r.origin];
+    return [r.input, r.sci, r.common, r.maori, r.status + (r._subspeciesBest ? ' (most threatened subspecies)' : ''), r.category, r.year, r.pest, r.origin];
   })].map(row => row.map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','));
   const blob = new Blob(['﻿' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
