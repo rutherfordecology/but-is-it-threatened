@@ -295,6 +295,14 @@
     .results-table tr:last-child td { border-bottom:none; }
     .results-table tr:hover td { background:#f8f9fb; }
     .results-table .unmatched td { color:#bbb; font-style:italic; }
+    .results-table .ambig-row td { background:#fffbee; }
+    .ambig-inline { color:#7a5900; font-size:.85rem; }
+    .ambig-badge  { background:#fff3cd; color:#7a5900; border:1px solid #f0c040; }
+    .ambig-pill   { background:#fff3cd; color:#7a5900; }
+    .ambig-list   { display:flex; flex-direction:column; gap:.5rem; margin-top:.6rem; }
+    .ambig-card   { background:#f9f9f9; border:1px solid #e0e0e0; border-radius:6px; padding:.6rem .75rem; }
+    .ambig-sci    { font-weight:500; margin-bottom:.15rem; }
+    .ambig-names  { font-size:.8rem; color:#666; margin-bottom:.25rem; }
     .results-table em { font-style:italic; }
   </style>
 </head>
@@ -302,7 +310,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.25</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.26</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -349,6 +357,7 @@ let nztcsStripped  = null;   // author-stripped keys: "genus species subsp" → 
 let nztcsSpecies   = null;   // species-level fallback: "genus species" → most threatened entry
 let nppa           = null;   // nppa.json: Set of lowercase scientific names
 let nzorIndex      = [];     // sorted search index built from nzor_names.json
+let ambiguousNames = null;   // vernacular key → [{sci, id?}] when 2+ species share the name
 let activeIdx = -1;
 let allItems  = [];
 let debounce;
@@ -459,6 +468,32 @@ Promise.all([
       nztcsStripped[stripped] = val;
     }
   }
+  // Build ambiguous vernacular names map: key → [{sci, id?}] for names shared by 2+ species
+  const vernacCollect = new Map();
+  for (const [k, val] of Object.entries(nzorData)) {
+    if (val.cls === 'v' && val.sci) {
+      if (!vernacCollect.has(k)) vernacCollect.set(k, []);
+      const list = vernacCollect.get(k);
+      const sn = norm(val.sci);
+      if (!list.some(x => norm(x.sci) === sn)) list.push({ sci: val.sci, id: val.sciId });
+    }
+  }
+  for (const [, val] of Object.entries(nztcsData)) {
+    if (!val.n) continue;
+    for (const cn of [val.cn, val.mn]) {
+      if (!cn) continue;
+      const k = norm(cn);
+      if (!k) continue;
+      if (!vernacCollect.has(k)) vernacCollect.set(k, []);
+      const list = vernacCollect.get(k);
+      const sn = norm(val.n);
+      if (!list.some(x => norm(x.sci) === sn)) list.push({ sci: val.n });
+    }
+  }
+  ambiguousNames = {};
+  for (const [k, list] of vernacCollect) {
+    if (list.length >= 2) ambiguousNames[k] = list;
+  }
   buildIndex(nzorData);
   dot.className = 'status-dot';
   dot.title = `NZOR: ${nzorIndex.length.toLocaleString()} names · NZTCS: ${Object.keys(nztcsData).length.toLocaleString()} entries · NPPA: ${nppa.size} pest plants`;
@@ -547,8 +582,9 @@ function renderDropdown(results) {
     const isPref   = !isVernac && !isSyn;
 
     // NZTCS badge: for vernacular use linked sci name, for synonym use accepted name
-    const entry   = nztcsFor(item.sci, item.acc, item.key);
-    const isPest  = isPestPlant(item.sci, item.acc, item.key);
+    const isAmbig = item.cls === 'v' && !!ambiguousNames?.[item.key];
+    const entry   = isAmbig ? null : nztcsFor(item.sci, item.acc, item.key);
+    const isPest  = isAmbig ? false : isPestPlant(item.sci, item.acc, item.key);
 
     // Name display
     const dispName = item.n || capFirst(item.key);
@@ -571,7 +607,7 @@ function renderDropdown(results) {
       <span class="sname">${nameHtml}</span>
       ${secHtml}${cnTag}${typeTag}
       ${isPest ? `<span class="badge cat-pest-plant">Pest plant</span>` : ''}
-      ${badgeHtml(entry)}
+      ${isAmbig ? `<span class="badge ambig-badge">multiple species</span>` : badgeHtml(entry)}
     </div>`;
     allItems.push(item);
   }
@@ -615,6 +651,13 @@ async function pick(i) {
   if (!item) return;
   hideSug();
   hint.hidden = true;
+
+  // Ambiguous vernacular — don't fetch NZOR, just list all possibilities
+  if (item.cls === 'v' && ambiguousNames?.[item.key]) {
+    showAmbiguousDetail(item);
+    return;
+  }
+
   detail.innerHTML = `<div class="spinner"><div class="spin-icon"></div>Loading…</div>`;
   detail.hidden = false;
 
@@ -715,6 +758,36 @@ function showLocalDetail(item) {
   detail.hidden = false;
 }
 
+// ── Ambiguous vernacular detail ───────────────────────────────────────────────
+function showAmbiguousDetail(item) {
+  const dispName = item.n || capFirst(item.key);
+  const candidates = ambiguousNames[item.key] || [];
+  const cards = candidates.map(c => {
+    const entry  = nztcsFor(c.sci);
+    const isPest = isPestPlant(c.sci);
+    const sciEntry = nztcs?.[norm(c.sci)];
+    const cn = sciEntry?.cn || '';
+    const mn = sciEntry?.mn || '';
+    return `<div class="ambig-card">
+      <div class="ambig-sci"><em>${escHtml(c.sci)}</em></div>
+      ${cn || mn ? `<div class="ambig-names">${[cn, mn].filter(Boolean).map(escHtml).join(' · ')}</div>` : ''}
+      <div style="margin-top:.3rem">
+        ${isPest ? `<span class="badge cat-pest-plant">Pest plant</span> ` : ''}
+        ${badgeHtml(entry)}
+      </div>
+    </div>`;
+  }).join('');
+  detail.innerHTML = `
+    <div class="detail-name">${escHtml(dispName)}</div>
+    <div class="detail-meta">
+      <span class="pill">Vernacular name</span>
+      <span class="pill ambig-pill">multiple species</span>
+    </div>
+    <div class="dl-title" style="margin-top:1rem">This name is shared by multiple species</div>
+    <div class="ambig-list">${cards}</div>`;
+  detail.hidden = false;
+}
+
 // ── NZTCS detail block ────────────────────────────────────────────────────────
 function nztcsBlock(entry) {
   if (!entry || !entry.s) {
@@ -797,6 +870,15 @@ function batchMatch(rawName) {
 
   if (!item) return { input: rawName, matched: false };
 
+  // Ambiguous vernacular — flag with all possibilities
+  if (item.cls === 'v' && ambiguousNames?.[item.key]) {
+    return {
+      input: rawName, matched: true, _ambiguous: true,
+      sci: ambiguousNames[item.key].map(x => x.sci).join(' / '),
+      common: '', maori: '', status: '', category: '', year: '', pest: '', origin: '',
+    };
+  }
+
   // Resolve to canonical scientific name
   const sciName = item.cls === 'v' ? item.sci
     : item.acc ? item.acc
@@ -861,7 +943,10 @@ function renderBatchTable(results) {
   if (!results.length) { document.getElementById('batch-results').innerHTML = ''; return; }
   const rows = results.map(r => {
     if (!r.matched) {
-      return `<tr class="unmatched"><td>${escHtml(r.input)}</td><td colspan="6">No match found</td></tr>`;
+      return `<tr class="unmatched"><td>${escHtml(r.input)}</td><td colspan="7">No match found</td></tr>`;
+    }
+    if (r._ambiguous) {
+      return `<tr class="ambig-row"><td>${escHtml(r.input)}</td><td colspan="7"><span class="ambig-inline">⚠ multiple species — could be: <em>${escHtml(r.sci)}</em></span></td></tr>`;
     }
     const pestCell = r.pest ? `<span class="badge cat-pest-plant">Pest plant</span>` : '';
     const statusCell = r.status
@@ -892,10 +977,11 @@ function renderBatchTable(results) {
 // ── Download CSV ──────────────────────────────────────────────────────────────
 function downloadBatchCSV() {
   const header = ['Input name','Scientific name','Common name','Māori name','NZTCS status','NZTCS category','Year','Pest plant (NPPA)','Origin'];
-  const csvRows = [header, ...batchResults.map(r => r.matched
-    ? [r.input, r.sci, r.common, r.maori, r.status, r.category, r.year, r.pest, r.origin]
-    : [r.input, 'No match', '', '', '', '', '', '', '']
-  )].map(row => row.map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','));
+  const csvRows = [header, ...batchResults.map(r => {
+    if (!r.matched) return [r.input, 'No match', '', '', '', '', '', '', ''];
+    if (r._ambiguous) return [r.input, 'Ambiguous — could be: ' + r.sci, '', '', '', '', '', '', ''];
+    return [r.input, r.sci, r.common, r.maori, r.status, r.category, r.year, r.pest, r.origin];
+  })].map(row => row.map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','));
   const blob = new Blob(['﻿' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
