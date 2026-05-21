@@ -224,29 +224,119 @@
       text-align:center; color:#bbb;
       font-size:.88rem; margin-top:2.5rem;
     }
+
+    /* ── Tabs ───────────────────────────────────────────── */
+    .tabs {
+      display:flex; gap:.5rem; margin-bottom:1.25rem;
+    }
+    .tab-btn {
+      padding:.45rem 1.1rem; border-radius:8px; border:1.5px solid #dde1e9;
+      background:#fff; font-size:.88rem; cursor:pointer; color:#666;
+      transition:background .1s, color .1s, border-color .1s;
+    }
+    .tab-btn.active { background:#1a3a4a; color:#fff; border-color:#1a3a4a; }
+
+    /* ── Batch ──────────────────────────────────────────── */
+    #batch-panel { display:none; }
+    #batch-panel.visible { display:block; }
+
+    .drop-zone {
+      border:2px dashed #cdd3dc; border-radius:10px;
+      padding:2rem 1.5rem; text-align:center;
+      background:#fafbfc; cursor:pointer;
+      transition:border-color .15s, background .15s;
+      margin-bottom:1rem;
+    }
+    .drop-zone.drag-over { border-color:#1a3a4a; background:#f0f4f8; }
+    .drop-zone p { color:#aaa; font-size:.9rem; margin-bottom:.5rem; }
+    .drop-zone strong { color:#555; }
+
+    #batch-paste {
+      width:100%; min-height:100px; padding:.75rem 1rem;
+      font-size:.88rem; border:1.5px solid #dde1e9; border-radius:8px;
+      resize:vertical; font-family:inherit; outline:none;
+      transition:border-color .15s;
+    }
+    #batch-paste:focus { border-color:#1a3a4a; }
+
+    .batch-actions {
+      display:flex; gap:.75rem; align-items:center; margin-top:.75rem;
+    }
+    .btn-primary {
+      padding:.55rem 1.3rem; background:#1a3a4a; color:#fff;
+      border:none; border-radius:8px; cursor:pointer; font-size:.9rem;
+      transition:opacity .15s;
+    }
+    .btn-primary:hover { opacity:.85; }
+    .btn-primary:disabled { opacity:.4; cursor:default; }
+    .btn-secondary {
+      padding:.55rem 1.1rem; background:#fff; color:#555;
+      border:1.5px solid #dde1e9; border-radius:8px; cursor:pointer; font-size:.9rem;
+    }
+    .batch-count { font-size:.83rem; color:#888; }
+
+    /* ── Results table ──────────────────────────────────── */
+    #batch-results { margin-top:1.25rem; overflow-x:auto; }
+    .results-table {
+      width:100%; border-collapse:collapse; font-size:.83rem;
+    }
+    .results-table th {
+      text-align:left; padding:.45rem .75rem;
+      background:#1a3a4a; color:#fff; font-weight:600;
+      font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;
+      white-space:nowrap;
+    }
+    .results-table td {
+      padding:.45rem .75rem; border-bottom:1px solid #f0f2f5;
+      vertical-align:middle;
+    }
+    .results-table tr:last-child td { border-bottom:none; }
+    .results-table tr:hover td { background:#f8f9fb; }
+    .results-table .unmatched td { color:#bbb; font-style:italic; }
+    .results-table em { font-style:italic; }
   </style>
 </head>
 <body>
 
 <header>
   <div>
-    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.10</span></h1>
+    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.11</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
 </header>
 
 <main>
-  <div class="search-wrap">
-    <input id="search" type="text"
-      placeholder="Search by name — scientific, common, or Māori…"
-      autocomplete="off" spellcheck="false" aria-label="Search species">
-    <button id="clear-btn" title="Clear" aria-label="Clear">✕</button>
-    <div id="suggestions" hidden role="listbox"></div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tab-search" onclick="switchTab('search')">Search</button>
+    <button class="tab-btn" id="tab-batch" onclick="switchTab('batch')">Batch lookup</button>
   </div>
 
-  <div id="detail" hidden></div>
-  <p class="hint" id="hint">Search across all NZ organism names in NZOR, with conservation status from NZTCS.</p>
+  <div id="search-panel">
+    <div class="search-wrap">
+      <input id="search" type="text"
+        placeholder="Search by name — scientific, common, or Māori…"
+        autocomplete="off" spellcheck="false" aria-label="Search species">
+      <button id="clear-btn" title="Clear" aria-label="Clear">✕</button>
+      <div id="suggestions" hidden role="listbox"></div>
+    </div>
+    <div id="detail" hidden></div>
+    <p class="hint" id="hint">Search across all NZ organism names in NZOR, with conservation status from NZTCS.</p>
+  </div>
+
+  <div id="batch-panel">
+    <div class="drop-zone" id="drop-zone">
+      <p><strong>Drag &amp; drop a CSV or text file here</strong></p>
+      <p>One name per row — any column, any name type (scientific, common, Māori, synonym)</p>
+    </div>
+    <textarea id="batch-paste" placeholder="Or paste names here, one per line…"></textarea>
+    <div class="batch-actions">
+      <button class="btn-primary" id="batch-run" onclick="runBatch()">Match names</button>
+      <button class="btn-secondary" id="batch-dl" onclick="downloadBatchCSV()" disabled>Download CSV</button>
+      <span class="batch-count" id="batch-count"></span>
+    </div>
+    <div id="batch-results"></div>
+  </div>
 </main>
 
 <script>
@@ -552,6 +642,150 @@ function nztcsBlock(entry) {
 // ── Util ──────────────────────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('search-panel').style.display = tab === 'search' ? '' : 'none';
+  document.getElementById('batch-panel').classList.toggle('visible', tab === 'batch');
+  document.getElementById('tab-search').classList.toggle('active', tab === 'search');
+  document.getElementById('tab-batch').classList.toggle('active', tab === 'batch');
+}
+
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+const batchPaste = document.getElementById('batch-paste');
+
+dropZone.addEventListener('click', () => {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.csv,.txt,.tsv';
+  inp.onchange = e => loadFile(e.target.files[0]);
+  inp.click();
+});
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => { batchPaste.value = e.target.result; };
+  reader.readAsText(file);
+}
+
+// ── Batch match ───────────────────────────────────────────────────────────────
+let batchResults = [];
+
+function batchMatch(rawName) {
+  const key = norm(rawName);
+  if (!key) return null;
+  const kd = normDia(key);
+
+  // Binary search for exact key match
+  let lo = 0, hi = nzorIndex.length - 1, item = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (nzorIndex[mid].key === key)      { item = nzorIndex[mid]; break; }
+    else if (nzorIndex[mid].key < key)   lo = mid + 1;
+    else                                  hi = mid - 1;
+  }
+  // Fallback: diacritic-normalised exact match
+  if (!item) item = nzorIndex.find(x => x.kd === kd) ?? null;
+
+  if (!item) return { input: rawName, matched: false };
+
+  // Resolve to canonical scientific name
+  const sciName = item.cls === 'v' ? item.sci
+    : item.acc ? item.acc
+    : (item.n || capFirst(item.key));
+
+  const nztcsEntry = nztcsFor(sciName, item.key);
+  const pest       = isPestPlant(sciName, item.key);
+
+  // Common + Māori: prefer NZTCS entry for the canonical sci name
+  const sciEntry = sciName ? nztcs?.[norm(sciName)] : null;
+  const common   = sciEntry?.cn || nztcsEntry?.cn || '';
+  const maori    = sciEntry?.mn || nztcsEntry?.mn || '';
+
+  return {
+    input:    rawName,
+    matched:  true,
+    sci:      sciName || '',
+    common,
+    maori,
+    status:   nztcsEntry?.s || '',
+    category: nztcsEntry?.c || '',
+    year:     nztcsEntry?.y || '',
+    pest:     pest ? 'Yes' : '',
+  };
+}
+
+function runBatch() {
+  const raw = batchPaste.value.trim();
+  if (!raw) return;
+
+  // Parse: CSV (take first non-empty cell per row) or plain text (one name per line)
+  const lines = raw.split(/\r?\n/).filter(l => l.trim());
+  const names = lines.map(l => {
+    // Try CSV split — take first non-empty cell
+    const cells = l.split(',').map(c => c.replace(/^"|"$/g, '').trim());
+    return cells.find(c => c) || '';
+  }).filter(Boolean);
+
+  batchResults = names.map(batchMatch).filter(Boolean);
+
+  renderBatchTable(batchResults);
+  const matched = batchResults.filter(r => r.matched).length;
+  document.getElementById('batch-count').textContent =
+    `${matched} of ${batchResults.length} matched`;
+  document.getElementById('batch-dl').disabled = matched === 0;
+}
+
+function renderBatchTable(results) {
+  if (!results.length) { document.getElementById('batch-results').innerHTML = ''; return; }
+  const rows = results.map(r => {
+    if (!r.matched) {
+      return `<tr class="unmatched"><td>${escHtml(r.input)}</td><td colspan="6">No match found</td></tr>`;
+    }
+    const pestCell = r.pest ? `<span class="badge cat-pest-plant">Pest plant</span>` : '';
+    const statusCell = r.status
+      ? `<span class="badge ${catClass(r.category)}">${escHtml(r.status)}</span>`
+      : '<span style="color:#bbb">—</span>';
+    return `<tr>
+      <td>${escHtml(r.input)}</td>
+      <td><em>${escHtml(r.sci)}</em></td>
+      <td>${escHtml(r.common)}</td>
+      <td>${escHtml(r.maori)}</td>
+      <td>${statusCell} ${pestCell}</td>
+      <td>${escHtml(r.category)}</td>
+      <td>${escHtml(r.year)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('batch-results').innerHTML = `
+    <table class="results-table">
+      <thead><tr>
+        <th>Input name</th><th>Scientific name</th><th>Common name</th>
+        <th>Māori name</th><th>Status</th><th>Category</th><th>Year</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── Download CSV ──────────────────────────────────────────────────────────────
+function downloadBatchCSV() {
+  const header = ['Input name','Scientific name','Common name','Māori name','NZTCS status','NZTCS category','Year','Pest plant (NPPA)'];
+  const csvRows = [header, ...batchResults.map(r => r.matched
+    ? [r.input, r.sci, r.common, r.maori, r.status, r.category, r.year, r.pest]
+    : [r.input, 'No match', '', '', '', '', '', '']
+  )].map(row => row.map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(','));
+  const blob = new Blob(['﻿' + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'nz-species-status.csv';
+  a.click();
 }
 </script>
 </body>
