@@ -230,7 +230,7 @@
 
 <header>
   <div>
-    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.8</span></h1>
+    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.9</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -443,7 +443,9 @@ async function pick(i) {
   const fetchId = async (id) => {
     const r = await fetch(`${NZOR}/names/${id}`, { headers: { Accept: 'application/json' } });
     const d = await r.json();
-    return d.names?.[0] ?? null;
+    const n = d.names?.[0] ?? null;
+    if (n) console.log('NZOR biostatuses:', JSON.stringify(n.biostatuses ?? n.Biostatuses ?? 'NOT FOUND'));
+    return n;
   };
 
   try {
@@ -496,16 +498,10 @@ function showDetail(n, vernacularName) {
   detail.innerHTML = `
     <div class="detail-name">${n.formattedPartialName || escHtml(n.partialName)}</div>
     ${n.authors ? `<div class="detail-author">${escHtml(n.authors)}</div>` : ''}
-    <div class="detail-meta">
-      ${n.rank    ? `<span class="pill">${escHtml(n.rank)}</span>` : ''}
-      ${n.status  ? `<span class="pill ${statusCls}">${escHtml(n.status)}</span>` : ''}
-      ${origin    ? `<span class="pill ${originCls}">${escHtml(origin)}</span>` : ''}
-      ${n.governingCode ? `<span class="pill">${escHtml(n.governingCode)}</span>` : ''}
-    </div>
+    ${origin ? `<div class="detail-meta"><span class="pill ${originCls}">${escHtml(origin)}</span></div>` : ''}
     ${acceptedBlock}
     ${vernacRow}
     ${isPest ? `<div class="nztcs-box cat-pest-plant" style="margin-top:.75rem"><div class="nztcs-header"><span class="nztcs-label">NPPA</span></div><div class="nztcs-status">Pest plant</div><div class="nztcs-cat">National Pest Plant Accord — banned from sale, propagation &amp; distribution</div></div>` : ''}
-    ${hier ? `<div class="dl-title">Classification</div><div class="hierarchy">${hier}</div>` : ''}
     ${nztcsBlock(entry)}
     <a class="nzor-link" href="https://www.nzor.org.nz/names/${n.nameId}" target="_blank" rel="noopener">
       View on NZOR ↗
