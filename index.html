@@ -227,6 +227,61 @@
       font-size:.88rem; margin-top:2.5rem;
     }
 
+    /* ── Nerd notes ─────────────────────────────────────── */
+    .nerd-notes {
+      margin-top:1.5rem;
+      border:1px solid #e0e0e0;
+      border-radius:8px;
+      background:#fafafa;
+    }
+    .nerd-notes summary {
+      cursor:pointer;
+      padding:.6rem 1rem;
+      font-size:.82rem;
+      color:#999;
+      list-style:none;
+      user-select:none;
+    }
+    .nerd-notes summary::-webkit-details-marker { display:none; }
+    .nerd-notes summary::before {
+      content:'▶ ';
+      font-size:.65rem;
+      vertical-align:middle;
+    }
+    .nerd-notes[open] summary::before { content:'▼ '; }
+    .nerd-notes[open] summary { color:#555; border-bottom:1px solid #e0e0e0; }
+    .nerd-body {
+      padding:1.25rem 1.5rem;
+      font-size:.85rem;
+      color:#444;
+      line-height:1.6;
+    }
+    .nerd-body h3 {
+      font-size:.9rem;
+      font-weight:700;
+      color:#1a3a4a;
+      margin:1.2rem 0 .4rem;
+    }
+    .nerd-body h3:first-child { margin-top:0; }
+    .nerd-body p { margin-bottom:.6rem; }
+    .nerd-table {
+      width:100%;
+      border-collapse:collapse;
+      margin:.5rem 0 .8rem;
+      font-size:.82rem;
+    }
+    .nerd-table th {
+      text-align:left;
+      border-bottom:2px solid #ddd;
+      padding:.3rem .5rem;
+      color:#1a3a4a;
+    }
+    .nerd-table td {
+      padding:.35rem .5rem;
+      border-bottom:1px solid #eee;
+      vertical-align:top;
+    }
+
     /* ── Tabs ───────────────────────────────────────────── */
     .tabs {
       display:flex; gap:.5rem; margin-bottom:1.25rem;
@@ -313,7 +368,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.29</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.30</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -335,6 +390,45 @@
     </div>
     <div id="detail" hidden></div>
     <p class="hint" id="hint">Search across all NZ organism names in NZOR, with conservation status from NZTCS.</p>
+
+    <details class="nerd-notes" id="nerd-notes">
+      <summary>Nerd notes</summary>
+      <div class="nerd-body">
+
+        <h3>Where the data comes from</h3>
+        <table class="nerd-table">
+          <thead><tr><th>Source</th><th>Size</th><th>Used for</th></tr></thead>
+          <tbody>
+            <tr><td><strong>NZOR</strong> (NZ Organisms Register)</td><td>~165,000 names</td><td>The main name list — scientific names, old names, common names, Māori names</td></tr>
+            <tr><td><strong>NZTCS</strong> (NZ Threat Classification System)</td><td>~43,000 entries</td><td>Conservation status — the most important part of the tool</td></tr>
+            <tr><td><strong>NPPA</strong> (National Pest Plant Accord)</td><td>166 species</td><td>Pest plant flag only</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Building the name list</h3>
+        <p><strong>Step 1 — Load everything from NZOR.</strong> NZOR is used first because it has the most complete collection of names — scientific names, synonyms, old combinations, and vernacular names with their links to scientific names.</p>
+        <p><strong>Step 2 — Add common and Māori names from NZTCS, and let NZTCS win any disputes.</strong> Some Māori and common names appear in NZTCS but not in NZOR, so these are added to fill gaps. Where NZOR and NZTCS disagree about which species a name belongs to, NZTCS wins. For example, NZOR records "tōtara" as a name for <em>Leucopogon fraseri</em> (pātōtara), while NZTCS correctly links it to <em>Podocarpus totara</em>. NZTCS is treated as more authoritative for New Zealand species names, so the NZOR entry is replaced.</p>
+
+        <h3>How a name is matched when you search</h3>
+        <p><strong>Step 1 — Exact match.</strong> The search term is looked up in the name list exactly as typed (lowercased, macrons kept). This covers most searches — <em>Rattus rattus</em>, kererū, <em>Clianthus puniceus</em>.</p>
+        <p><strong>Step 2 — Match with macrons stripped.</strong> If nothing is found, the search tries again ignoring macrons. This means typing "kereru" still finds "kererū", and "totara" still finds "tōtara". Without this step, anyone without a macron keyboard would get no results for many NZ names.</p>
+        <p>If neither step finds anything, the name is unmatched.</p>
+
+        <h3>How the threat status is found</h3>
+        <p>Once a species has been identified, the tool looks for its NZTCS status in this order:</p>
+        <p><strong>Step 1 — Direct match.</strong> The species name is looked up in NZTCS exactly. This works for the majority of species — <em>Rattus rattus</em>, <em>Nestor notabilis</em>, <em>Tradescantia fluminensis</em>.</p>
+        <p><strong>Step 2 — Strip the author name and try again.</strong> NZTCS entries often include the name of the person who first described the subspecies. For example, the Stewart Island fernbird is stored as <em>Bowdleria punctata stewartiana</em> Oliver, 1930 — not just <em>Bowdleria punctata stewartiana</em>. If step 1 fails, the tool strips the author off and tries again. Without this step, most subspecies would get no status at all. This match is only flagged with a <strong>*</strong> when two or more NZTCS entries share the same name after the author is removed — meaning the tool cannot be certain it picked the right one. In practice this is rare.</p>
+        <p><strong>Step 3 — Show all subspecies and highlight the most threatened.</strong> If the name still cannot be matched — for example because someone searched <em>Megadyptes antipodes</em> (yellow-eyed penguin), which NZTCS only lists at the subspecies level — the tool finds all subspecies of that species listed in NZTCS, displays them all, and highlights the most threatened one. The full list is shown so the user can see the complete picture and judge for themselves.</p>
+
+        <h3>Names shared by more than one species</h3>
+        <p>When loading, the tool checks every common name and Māori name to see how many different species use it. If two or more species share a name, it is flagged as ambiguous. This is common in NZ — <em>tītī</em> refers to several petrel and shearwater species, <em>puka</em> is used for both <em>Griselinia lucida</em> and <em>Meryta sinclairii</em>, and <em>mingimingi</em> applies to several shrub species across <em>Coprosma</em>, <em>Leucopogon</em>, and others. When a name is ambiguous, all the species that share it are listed rather than guessing.</p>
+
+        <h3>Remaining limitations</h3>
+        <p><strong>Native/exotic is only available when online.</strong> Whether a species is native or exotic comes from the NZOR website in real time. In batch mode this is not fetched, so most batch results show "Unknown" for origin. Species flagged as introduced or naturalised in NZTCS, or listed on the NPPA, will still show as Exotic.</p>
+        <p><strong>The most-threatened subspecies highlight is a rule of thumb.</strong> Highlighting the most threatened subspecies as the most relevant one is a reasonable default but still a guess. A user in Southland searching <em>Petroica australis</em> probably cares about the South Island robin, not whichever subspecies happens to be most threatened nationally. There is currently no way to refine this without knowing the user's location.</p>
+
+      </div>
+    </details>
   </div>
 
   <div id="batch-panel">
