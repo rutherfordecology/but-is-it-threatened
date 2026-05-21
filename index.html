@@ -302,7 +302,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.16</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.17</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -418,6 +418,20 @@ Promise.all([
 function buildIndex(d) {
   for (const [key, val] of Object.entries(d)) {
     nzorIndex.push({ key, kd: normDia(key), ...val });
+  }
+  // Add NZTCS common + Māori names that aren't already in the NZOR index
+  if (nztcs) {
+    const existing = new Set(nzorIndex.map(x => x.key));
+    for (const [nztcsKey, val] of Object.entries(nztcs)) {
+      const sciName = val.n || capFirst(nztcsKey);
+      for (const cn of [val.cn, val.mn]) {
+        if (!cn) continue;
+        const key = norm(cn);
+        if (!key || existing.has(key)) continue;
+        existing.add(key);
+        nzorIndex.push({ key, kd: normDia(key), n: cn, cls: 'v', sci: sciName });
+      }
+    }
   }
   nzorIndex.sort((a, b) => a.key < b.key ? -1 : 1);
 }
