@@ -230,7 +230,7 @@
 
 <header>
   <div>
-    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.6</span></h1>
+    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.7</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -473,8 +473,11 @@ function showDetail(n, vernacularName) {
     : s.includes('synonym') ? 'status-synonym'
     : s.includes('misapplied') ? 'status-misapplied' : '';
 
-  const nzBio  = (n.biostatuses || []).find(b => b.geoRegion === 'New Zealand' || b.GeoRegion === 'New Zealand');
-  const origin = nzBio?.origin || nzBio?.Origin || null;
+  const nzBio  = (n.biostatuses || n.Biostatuses || []).find(b => {
+    const r = b.GeoRegion?.Value ?? b.GeoRegion ?? b.geoRegion?.Value ?? b.geoRegion ?? '';
+    return r === 'New Zealand';
+  });
+  const origin = nzBio ? (nzBio.Origin?.Value ?? nzBio.Origin ?? nzBio.origin?.Value ?? nzBio.origin ?? null) : null;
   const originCls = origin === 'Endemic' ? 'status-current'
     : origin === 'Native' ? 'status-current'
     : origin === 'Exotic' ? 'status-synonym' : '';
