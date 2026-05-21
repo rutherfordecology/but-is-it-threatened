@@ -302,7 +302,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.20</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.21</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -376,6 +376,12 @@ function nztcsFor(...names) {
     const k = norm(n);
     if (nztcs[k]) return nztcs[k];
     if (nztcsSpecies?.[k]) return nztcsSpecies[k];
+    // For subspecies-level names (3+ words), also try genus+species fallback
+    const parts = k.split(' ');
+    if (parts.length >= 3) {
+      const sp = parts[0] + ' ' + parts[1];
+      if (nztcsSpecies?.[sp]) return nztcsSpecies[sp];
+    }
   }
   return null;
 }
