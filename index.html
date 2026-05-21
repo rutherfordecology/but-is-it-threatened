@@ -302,7 +302,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.23</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.24</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -447,9 +447,14 @@ Promise.all([
     }
   }
   // Build author-stripped map: "genus species subsp" (no author) → entry
+  // NZTCS keys use two authority formats: "(author, year)" and bare "author, year"
+  // or "author & author, year" — strip both.
   nztcsStripped = {};
   for (const [key, val] of Object.entries(nztcsData)) {
-    const stripped = key.replace(/\s*\([^)]+\)\s*$/, '').trim();
+    const stripped = key
+      .replace(/\s*\([^)]+\)\s*$/, '')                          // strip trailing (author, year)
+      .replace(/\s+[a-z]+(?:\s+&\s+[a-z]+)?,\s*\d{4}\s*$/, '') // strip author, year  or  author & author, year
+      .trim();
     if (stripped !== key && !nztcsStripped[stripped]) {
       nztcsStripped[stripped] = val;
     }
