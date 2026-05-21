@@ -302,7 +302,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.18</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.19</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -344,9 +344,10 @@
 <script>
 const NZOR = 'https://data.nzor.org.nz/v1';
 
-let nztcs     = null;   // nztcs_slim.json: lowercase-name → {s,c,y,...}
-let nppa      = null;   // nppa.json: Set of lowercase scientific names
-let nzorIndex = [];     // sorted search index built from nzor_names.json
+let nztcs          = null;   // nztcs_slim.json: lowercase-name → {s,c,y,...}
+let nztcsSpecies   = null;   // species-level fallback: "genus species" → entry
+let nppa           = null;   // nppa.json: Set of lowercase scientific names
+let nzorIndex      = [];     // sorted search index built from nzor_names.json
 let activeIdx = -1;
 let allItems  = [];
 let debounce;
@@ -370,7 +371,12 @@ function badgeHtml(entry) {
 }
 function nztcsFor(...names) {
   if (!nztcs) return null;
-  for (const n of names) { const h = nztcs[norm(n)]; if (h) return h; }
+  for (const n of names) {
+    if (!n) continue;
+    const k = norm(n);
+    if (nztcs[k]) return nztcs[k];
+    if (nztcsSpecies?.[k]) return nztcsSpecies[k];
+  }
   return null;
 }
 function isPestPlant(...names) {
@@ -407,6 +413,15 @@ Promise.all([
 ]).then(([nztcsData, nzorData, nppaData]) => {
   nztcs = nztcsData;
   nppa  = new Set(nppaData);
+  // Build species-level fallback: "genus species" → best subspecies entry
+  nztcsSpecies = {};
+  for (const [key, val] of Object.entries(nztcsData)) {
+    const parts = key.split(' ');
+    if (parts.length >= 3) {
+      const sp = parts[0] + ' ' + parts[1];
+      if (!nztcsSpecies[sp]) nztcsSpecies[sp] = val;
+    }
+  }
   buildIndex(nzorData);
   dot.className = 'status-dot';
   dot.title = `NZOR: ${nzorIndex.length.toLocaleString()} names · NZTCS: ${Object.keys(nztcsData).length.toLocaleString()} entries · NPPA: ${nppa.size} pest plants`;
