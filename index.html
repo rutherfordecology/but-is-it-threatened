@@ -300,6 +300,21 @@
     }
     .tab-btn.active { background:#1a3a4a; color:#fff; border-color:#1a3a4a; }
 
+    /* ── Sensitive name toast ───────────────────────────── */
+    #sensitive-toast {
+      display:none; position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%);
+      background:#1a3a4a; color:#fff; padding:.75rem 1.25rem; border-radius:.5rem;
+      font-size:.9rem; max-width:90vw; text-align:center; z-index:9999;
+      box-shadow:0 4px 16px rgba(0,0,0,.25); pointer-events:none;
+    }
+    #sensitive-toast.show { display:block; animation:fadeInOut 4s forwards; }
+    @keyframes fadeInOut {
+      0%   { opacity:0; }
+      10%  { opacity:1; }
+      75%  { opacity:1; }
+      100% { opacity:0; }
+    }
+
     /* ── Batch ──────────────────────────────────────────── */
     #batch-panel { display:none; }
     #batch-panel.visible { display:block; }
@@ -374,9 +389,11 @@
 </head>
 <body>
 
+<div id="sensitive-toast"></div>
+
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.37</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.38</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -699,6 +716,7 @@ input.addEventListener('input', () => {
   clearTimeout(debounce);
   const q = input.value.trim();
   if (q.length < 3) { hideSug(); return; }
+  if (q.toLowerCase().includes('niggerhead')) showSensitiveToast("It's 2026 folks, surely we can do better and use a different name for this one.");
   debounce = setTimeout(() => renderDropdown(nzorSearch(q)), 250);
 });
 input.addEventListener('keydown', onKey);
@@ -715,6 +733,17 @@ document.addEventListener('click', e => {
 });
 
 // ── Render dropdown ───────────────────────────────────────────────────────────
+let _toastTimer;
+function showSensitiveToast(msg) {
+  const t = document.getElementById('sensitive-toast');
+  t.textContent = msg;
+  t.classList.remove('show');
+  clearTimeout(_toastTimer);
+  void t.offsetWidth; // force reflow to restart animation
+  t.classList.add('show');
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
 function renderDropdown(results) {
   if (!results.length) {
     sugBox.innerHTML = `<div class="msg">No results found</div>`;
