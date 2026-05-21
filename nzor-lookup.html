@@ -229,7 +229,7 @@
 
 <header>
   <div>
-    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.3</span></h1>
+    <h1>NZ Species Lookup <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.4</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -251,141 +251,76 @@
 <script>
 const NZOR = 'https://data.nzor.org.nz/v1';
 
-let nztcs = null;          // slim lookup: lowercase-name → {s,c,y,n,cn?,mn?}
-let vernacIndex = [];      // vernacular-searchable entries (have cn or mn)
-let sciIndex   = [];       // canonical scientific name entries, sorted a-z
-let nzorResults  = [];     // last NZOR API results
-let vernacResults = [];    // last NZTCS vernacular search results
-let sciResults    = [];    // last NZTCS scientific name search results
+let nztcs     = null;   // nztcs_slim.json: lowercase-name → {s,c,y,...}
+let nzorIndex = [];     // sorted search index built from nzor_names.json
 let activeIdx = -1;
-let allItems = [];
+let allItems  = [];
 let debounce;
 
-// ── Load NZTCS ───────────────────────────────────────────────────────────────
-const dot = document.getElementById('dot');
-
-const weekStamp = Math.floor(Date.now() / 6048e5); // changes every 7 days
-fetch(`nztcs_slim.json?v=${weekStamp}`)
-  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-  .then(d => {
-    nztcs = d;
-    buildVernacIndex(d);
-    buildSciIndex(d);
-    dot.className = 'status-dot';
-    dot.title = `NZTCS loaded — ${Object.keys(d).length.toLocaleString()} entries`;
-  })
-  .catch(() => {
-    dot.className = 'status-dot error';
-    dot.title = 'NZTCS data unavailable — conservation status will not be shown';
-  });
-
-function buildVernacIndex(d) {
-  const seen = new Set();
-  for (const [key, val] of Object.entries(d)) {
-    if (!val.cn && !val.mn) continue;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    vernacIndex.push({ key, ...val });
-  }
-}
-
-function buildSciIndex(d) {
-  // Canonical entries only (key matches the normalised canonical name)
-  for (const [key, val] of Object.entries(d)) {
-    if (val.n && norm(val.n) === key) sciIndex.push({ key, ...val });
-  }
-  sciIndex.sort((a, b) => a.key < b.key ? -1 : 1);
-}
-
-// ── Scientific name search (client-side, prefix match on NZTCS keys) ─────────
-function sciSearch(q) {
-  if (!sciIndex.length || q.length < 2) return [];
-  const qn = norm(q);
-  const results = [];
-  for (const item of sciIndex) {
-    if (item.key > qn + '￿') break;
-    if (item.key.startsWith(qn)) results.push(item);
-    if (results.length >= 10) break;
-  }
-  return results;
-}
-
-// ── Normalisation ─────────────────────────────────────────────────────────────
+// ── Normalisation ────────────────────────────────────────────────────────────
 function norm(s) {
   return s ? s.toLowerCase().replace(/\s+/g, ' ').trim() : '';
 }
-
-// Strip diacritics for fuzzy vernacular matching (kōtuku → kotuku)
 function normDia(s) {
   return norm(s).normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
-
-// Capitalise first letter of a lowercase scientific name key for display
 function capFirst(s) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
-
 function catClass(cat) {
   return cat ? 'cat-' + cat.toLowerCase().replace(/[^a-z]+/g, '-').replace(/-$/,'') : '';
 }
-
 function badgeHtml(entry) {
   if (!entry) return '';
   return `<span class="badge ${catClass(entry.c)}">${escHtml(entry.s || entry.c)}</span>`;
 }
-
 function nztcsFor(...names) {
   if (!nztcs) return null;
-  for (const n of names) {
-    const hit = nztcs[norm(n)];
-    if (hit) return hit;
-  }
+  for (const n of names) { const h = nztcs[norm(n)]; if (h) return h; }
   return null;
 }
 
-// Extract linked scientific names from a vernacular NZOR name object
-function linkedSciNames(name) {
-  const out = [];
-  for (const concept of (name.concepts || [])) {
-    for (const app of (concept.applications || [])) {
-      if (app.type === 'is vernacular for' && app.concept?.name?.partialName) {
-        out.push(app.concept.name);   // {nameId, partialName, rank, …}
-      }
-    }
+// ── Load data ────────────────────────────────────────────────────────────────
+const dot = document.getElementById('dot');
+const weekStamp = Math.floor(Date.now() / 6048e5);
+
+Promise.all([
+  fetch(`nztcs_slim.json?v=${weekStamp}`).then(r => r.json()),
+  fetch(`nzor_names.json?v=${weekStamp}`).then(r => r.json()),
+]).then(([nztcsData, nzorData]) => {
+  nztcs = nztcsData;
+  buildIndex(nzorData);
+  dot.className = 'status-dot';
+  dot.title = `NZOR: ${nzorIndex.length.toLocaleString()} names · NZTCS: ${Object.keys(nztcsData).length.toLocaleString()} entries`;
+}).catch(() => {
+  dot.className = 'status-dot error';
+  dot.title = 'Data failed to load';
+});
+
+function buildIndex(d) {
+  for (const [key, val] of Object.entries(d)) {
+    nzorIndex.push({ key, kd: normDia(key), ...val });
   }
-  return out;
+  nzorIndex.sort((a, b) => a.key < b.key ? -1 : 1);
 }
 
-// ── Vernacular search (client-side, NZTCS-derived) ───────────────────────────
-function vernacSearch(q) {
-  if (!q || q.length < 2 || !vernacIndex.length) return [];
-  const qn = normDia(q);
-  const exact = [], prefix = [], partial = [];
-
-  for (const item of vernacIndex) {
-    const cn = item.cn ? normDia(item.cn) : '';
-    const mn = item.mn ? normDia(item.mn) : '';
-    if (!cn && !mn) continue;
-
-    let matched = null;
-    for (const [raw, normalised] of [[item.cn, cn], [item.mn, mn]]) {
-      if (!raw) continue;
-      if (normalised === qn)            { matched = raw; break; }
-      if (normalised.startsWith(qn))    { matched = raw; }
-      else if (normalised.includes(qn)) { matched = matched || raw; }
+// ── Search ───────────────────────────────────────────────────────────────────
+function nzorSearch(q) {
+  if (!nzorIndex.length || q.length < 2) return [];
+  const qd = normDia(q);
+  const prefix = [], contains = [];
+  for (const item of nzorIndex) {
+    if (item.kd.startsWith(qd)) {
+      prefix.push(item);
+      if (prefix.length >= 12) break;
+    } else if (contains.length < 5 && item.kd.includes(qd)) {
+      contains.push(item);
     }
-    if (!matched) continue;
-
-    const slot = normDia(matched) === qn ? exact
-               : normDia(matched).startsWith(qn) ? prefix : partial;
-    slot.push({ ...item, matchedVia: matched });
-    if (exact.length + prefix.length + partial.length >= 20) break;
   }
-
-  return [...exact, ...prefix, ...partial].slice(0, 8);
+  return [...prefix, ...contains];
 }
 
-// ── UI elements ───────────────────────────────────────────────────────────────
+// ── UI ───────────────────────────────────────────────────────────────────────
 const input    = document.getElementById('search');
 const sugBox   = document.getElementById('suggestions');
 const clearBtn = document.getElementById('clear-btn');
@@ -397,18 +332,9 @@ input.addEventListener('input', () => {
   clearTimeout(debounce);
   const q = input.value.trim();
   if (!q) { hideSug(); return; }
-
-  // Show client-side matches immediately, then NZOR when it arrives
-  sciResults   = sciSearch(q);
-  vernacResults = vernacSearch(q);
-  nzorResults  = [];
-  renderDropdown([], sciResults, vernacResults, true);
-
-  debounce = setTimeout(() => doNzorSearch(q), 300);
+  debounce = setTimeout(() => renderDropdown(nzorSearch(q)), 80);
 });
-
 input.addEventListener('keydown', onKey);
-
 clearBtn.addEventListener('click', () => {
   input.value = '';
   clearBtn.style.display = 'none';
@@ -417,116 +343,48 @@ clearBtn.addEventListener('click', () => {
   hint.hidden = false;
   input.focus();
 });
-
 document.addEventListener('click', e => {
   if (!e.target.closest('.search-wrap')) hideSug();
 });
 
-// ── NZOR API search ───────────────────────────────────────────────────────────
-async function doNzorSearch(q) {
-  try {
-    const r = await fetch(`${NZOR}/names/search?query=${encodeURIComponent(q)}&pageSize=12`);
-    if (!r.ok) throw new Error(r.statusText);
-    const data = await r.json();
-    nzorResults = data.results || [];
-    renderDropdown(nzorResults, sciResults, vernacResults, false);
-  } catch(e) {
-    nzorResults = [];
-    renderDropdown([], sciResults, vernacResults, false);
-  }
-}
-
 // ── Render dropdown ───────────────────────────────────────────────────────────
-function renderDropdown(nzor, sci, vernac, nzorLoading) {
-  // Deduplicate client-side results against NZOR results (NZOR takes precedence)
-  const nzorNames = new Set(nzor.map(r => norm(r.name.partialName)));
-  const uniqueSci    = sci.filter(v => !nzorNames.has(v.key));
-  const uniqueVernac = vernac.filter(v => !nzorNames.has(v.key));
-
-  if (!nzor.length && !uniqueSci.length && !uniqueVernac.length && !nzorLoading) {
+function renderDropdown(results) {
+  if (!results.length) {
     sugBox.innerHTML = `<div class="msg">No results found</div>`;
     sugBox.hidden = false;
     allItems = [];
     return;
   }
-
-  let html = '';
   allItems = [];
+  let html = `<div class="section-sep">Names</div>`;
 
-  // NZOR results — scientific and vernacular names mixed (already ranked by score)
-  if (nzor.length) {
-    html += `<div class="section-sep">NZOR names</div>`;
-    nzor.forEach(res => {
-      const n = res.name;
-      const isVernac = n.class === 'Vernacular Name';
+  for (const item of results) {
+    const isVernac = item.cls === 'v';
+    const isSyn    = !!item.acc;
+    const isPref   = !isVernac && !isSyn;
 
-      if (isVernac) {
-        // Vernacular name — find linked scientific names via concepts.applications
-        const linked = linkedSciNames(n);
-        const entry = nztcsFor(...linked.map(l => l.partialName), n.partialName);
-        const sciHtml = linked.length
-          ? `<span class="syn-tag">${escHtml(linked[0].partialName)}</span>` : '';
-        html += `<div class="suggestion" data-i="${allItems.length}" role="option">
-          <span class="sname" style="font-style:normal">${escHtml(n.partialName)}</span>
-          ${sciHtml}
-          <span class="rank-tag">vernacular</span>
-          ${badgeHtml(entry)}
-        </div>`;
-        allItems.push({ type: 'nzor-vernac', nzorRes: res, linked });
-      } else {
-        // Scientific name
-        const isSyn  = n.nameId !== n.acceptedName?.nameId;
-        const isPref = !isSyn && n.status === 'Current';
-        const entry  = nztcsFor(n.partialName, n.acceptedName?.partialName);
-        const synHtml = isSyn
-          ? `<span class="syn-tag">${escHtml(n.acceptedName?.partialName || '')}</span>` : '';
-        const nameHtml = isPref
-          ? `<strong>${n.formattedPartialName || escHtml(n.partialName)}</strong>`
-          : (n.formattedPartialName || escHtml(n.partialName));
-        html += `<div class="suggestion" data-i="${allItems.length}" role="option">
-          <span class="sname">${nameHtml}</span>
-          ${synHtml}
-          <span class="rank-tag">${n.rank || ''}</span>
-          ${badgeHtml(entry)}
-        </div>`;
-        allItems.push({ type: 'nzor', nzorRes: res });
-      }
-    });
-  }
+    // NZTCS badge: for vernacular use linked sci name, for synonym use accepted name
+    const entry = nztcsFor(item.sci, item.acc, item.key);
 
-  if (nzorLoading) {
-    html += `<div class="spinner"><div class="spin-icon"></div>Searching NZOR…</div>`;
-  }
+    // Name display
+    const dispName = item.n || capFirst(item.key);
+    const nameHtml = isVernac
+      ? escHtml(dispName)
+      : isPref
+        ? `<strong><em>${escHtml(dispName)}</em></strong>`
+        : `<em>${escHtml(dispName)}</em>`;
 
-  // NZTCS scientific name matches (client-side fallback when NZOR hasn't returned yet or is unavailable)
-  if (uniqueSci.length) {
-    html += `<div class="section-sep">Scientific names</div>`;
-    uniqueSci.forEach(v => {
-      const isPref = true; // sciIndex contains only canonical entries
-      html += `<div class="suggestion" data-i="${allItems.length}" role="option">
-        <span class="sname"><strong>${escHtml(capFirst(v.key))}</strong></span>
-        ${badgeHtml(v)}
-      </div>`;
-      allItems.push({ type: 'vernac', vernacItem: v });
-    });
-  }
+    // Secondary tag: linked sci name (vernacular) or accepted name (synonym)
+    const secName  = isVernac ? item.sci : item.acc;
+    const secHtml  = secName ? `<span class="syn-tag">${escHtml(secName)}</span>` : '';
+    const typeTag  = isVernac ? `<span class="rank-tag">vernacular</span>` : '';
 
-  // NZTCS vernacular-only results (names not already returned by NZOR)
-  if (uniqueVernac.length) {
-    html += `<div class="section-sep">By common / Māori name</div>`;
-    uniqueVernac.forEach(v => {
-      // isPref: the key IS the canonical NZTCS name (not an alias/previous name)
-      const isPref = v.n && norm(v.n) === v.key;
-      const nameHtml = isPref
-        ? `<strong>${escHtml(capFirst(v.key))}</strong>`
-        : escHtml(capFirst(v.key));
-      html += `<div class="suggestion" data-i="${allItems.length}" role="option">
-        <span class="sname" style="font-style:italic">${nameHtml}</span>
-        <span class="via-tag">${escHtml(v.matchedVia)}</span>
-        ${badgeHtml(v)}
-      </div>`;
-      allItems.push({ type: 'vernac', vernacItem: v });
-    });
+    html += `<div class="suggestion" data-i="${allItems.length}" role="option">
+      <span class="sname">${nameHtml}</span>
+      ${secHtml}${typeTag}
+      ${badgeHtml(entry)}
+    </div>`;
+    allItems.push(item);
   }
 
   sugBox.innerHTML = html;
@@ -548,19 +406,13 @@ function onKey(e) {
   const items = sugBox.querySelectorAll('.suggestion');
   if (!items.length) return;
   if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    setActive(Math.min(activeIdx + 1, items.length - 1), items);
+    e.preventDefault(); setActive(Math.min(activeIdx + 1, items.length - 1), items);
   } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    setActive(Math.max(activeIdx - 1, 0), items);
+    e.preventDefault(); setActive(Math.max(activeIdx - 1, 0), items);
   } else if (e.key === 'Enter' && activeIdx >= 0) {
-    e.preventDefault();
-    pick(activeIdx);
-  } else if (e.key === 'Escape') {
-    hideSug();
-  }
+    e.preventDefault(); pick(activeIdx);
+  } else if (e.key === 'Escape') { hideSug(); }
 }
-
 function setActive(i, items) {
   items.forEach(el => el.classList.remove('active'));
   activeIdx = i;
@@ -574,53 +426,34 @@ async function pick(i) {
   if (!item) return;
   hideSug();
   hint.hidden = true;
+  detail.innerHTML = `<div class="spinner"><div class="spin-icon"></div>Loading…</div>`;
+  detail.hidden = false;
 
-  if (item.type === 'nzor') {
-    showDetail(item.nzorRes);
+  const fetchId = async (id) => {
+    const r = await fetch(`${NZOR}/names/${id}`);
+    const d = await r.json();
+    return d.names?.[0] ?? null;
+  };
 
-  } else if (item.type === 'nzor-vernac') {
-    // NZOR vernacular name — show the linked scientific name's detail if we have it
-    const linked = item.linked;
-    if (linked.length) {
-      detail.innerHTML = `<div class="spinner"><div class="spin-icon"></div>Loading…</div>`;
-      detail.hidden = false;
-      try {
-        const r = await fetch(`${NZOR}/names/${linked[0].nameId}`);
-        const data = await r.json();
-        if (data.names?.length) {
-          showDetail({ name: data.names[0] }, item.nzorRes.name.partialName);
-        } else {
-          showDetail(item.nzorRes);
-        }
-      } catch {
-        showDetail(item.nzorRes);
-      }
-    } else {
-      showDetail(item.nzorRes);
+  try {
+    if (item.cls === 'v' && item.sciId) {
+      // Vernacular — show the linked scientific name's detail
+      const sciName = await fetchId(item.sciId);
+      if (sciName) { showDetail(sciName, item.n || capFirst(item.key)); return; }
     }
-
-  } else {
-    // NZTCS vernacular hit — search NZOR for the scientific name
-    detail.innerHTML = `<div class="spinner"><div class="spin-icon"></div>Loading…</div>`;
-    detail.hidden = false;
-    try {
-      const r = await fetch(`${NZOR}/names/search?query=${encodeURIComponent(capFirst(item.vernacItem.key))}&pageSize=1`);
-      const data = await r.json();
-      if (data.results?.length) {
-        showDetail(data.results[0]);
-      } else {
-        showVernacDetail(item.vernacItem);
-      }
-    } catch {
-      showVernacDetail(item.vernacItem);
+    if (item.id) {
+      const nameObj = await fetchId(item.id);
+      if (nameObj) { showDetail(nameObj); return; }
     }
-  }
+  } catch {}
+
+  // Fallback: offline detail from local data
+  showLocalDetail(item);
 }
 
 // ── Detail — NZOR result ──────────────────────────────────────────────────────
-function showDetail(res, vernacularName) {
-  const n = res.name;
-  const isSyn = n.nameId !== n.acceptedName?.nameId;
+function showDetail(n, vernacularName) {
+  const isSyn = n.acceptedName?.nameId && n.nameId !== n.acceptedName.nameId;
   const entry = nztcsFor(n.partialName, n.acceptedName?.partialName);
 
   const s = (n.status || '').toLowerCase();
@@ -657,14 +490,28 @@ function showDetail(res, vernacularName) {
   detail.hidden = false;
 }
 
-// ── Detail — vernacular-only fallback (NZOR didn't return a match) ────────────
-function showVernacDetail(v) {
-  const entry = nztcs ? (nztcs[v.key] || v) : v;
+// ── Detail — offline fallback from nzor_names.json ────────────────────────────
+function showLocalDetail(item) {
+  const isVernac = item.cls === 'v';
+  const isSyn    = !!item.acc;
+  const dispName = item.n || capFirst(item.key);
+  const entry    = nztcsFor(item.sci, item.acc, item.key);
+
+  const secBlock = isVernac && item.sci
+    ? `<div class="accepted-row" style="border-color:#6ab0d4">Vernacular name for <strong>${escHtml(item.sci)}</strong></div>`
+    : isSyn
+      ? `<div class="accepted-row">Synonym of <strong>${escHtml(item.acc)}</strong></div>`
+      : '';
+
   detail.innerHTML = `
-    <div class="detail-name" style="font-style:normal">${escHtml(capFirst(v.key))}</div>
-    ${v.cn ? `<div class="detail-author">${escHtml(v.cn)}</div>` : ''}
-    <div class="detail-meta"><span class="pill">NZTCS record only</span></div>
-    ${nztcsBlock(entry)}`;
+    <div class="detail-name" style="${isVernac ? 'font-style:normal' : ''}">${isVernac ? escHtml(dispName) : `<em>${escHtml(dispName)}</em>`}</div>
+    <div class="detail-meta">
+      ${isVernac ? '<span class="pill">Vernacular name</span>' : ''}
+      ${isSyn ? '<span class="pill status-synonym">Synonym</span>' : ''}
+    </div>
+    ${secBlock}
+    ${nztcsBlock(entry)}
+    ${item.id ? `<a class="nzor-link" href="https://www.nzor.org.nz/names/${item.id}" target="_blank" rel="noopener">View on NZOR ↗</a>` : ''}`;
   detail.hidden = false;
 }
 
