@@ -374,6 +374,9 @@
     .results-table .unmatched td { color:#bbb; font-style:italic; }
     .results-table .ambig-row td { background:#fffbee; }
     .ambig-inline { color:#7a5900; font-size:.85rem; }
+    .ambig-picks { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.4rem; }
+    .ambig-pick-btn { background:#fff; border:1px solid #c8a84b; color:#7a5900; border-radius:.3rem; padding:.25rem .6rem; font-size:.82rem; cursor:pointer; font-style:italic; }
+    .ambig-pick-btn:hover { background:#fdf3dc; }
     .ambig-badge  { background:#fff3cd; color:#7a5900; border:1px solid #f0c040; }
     .ambig-pill   { background:#fff3cd; color:#7a5900; }
     .ambig-list   { display:flex; flex-direction:column; gap:.5rem; margin-top:.6rem; }
@@ -393,7 +396,7 @@
 
 <header>
   <div>
-    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.40</span></h1>
+    <h1>but is it threatened? <span style="font-size:0.65rem;font-weight:400;opacity:0.4;letter-spacing:0.05em;">v1.41</span></h1>
     <p>NZOR names · NZTCS conservation status</p>
   </div>
   <div id="dot" class="status-dot loading" title="Loading NZTCS data…"></div>
@@ -1104,6 +1107,7 @@ function batchMatch(rawName) {
     return {
       input: rawName, matched: true, _ambiguous: true,
       sci: ambiguousNames[item.key].map(x => x.sci).join(' / '),
+      _options: ambiguousNames[item.key].map(x => x.sci),
       common: '', maori: '', status: '', category: '', year: '', pest: '', origin: '',
     };
   }
@@ -1177,12 +1181,15 @@ function runBatch() {
 
 function renderBatchTable(results) {
   if (!results.length) { document.getElementById('batch-results').innerHTML = ''; return; }
-  const rows = results.map(r => {
+  const rows = results.map((r, i) => {
     if (!r.matched) {
       return `<tr class="unmatched"><td>${escHtml(r.input)}</td><td colspan="7">No match found</td></tr>`;
     }
     if (r._ambiguous) {
-      return `<tr class="ambig-row"><td>${escHtml(r.input)}</td><td colspan="7"><span class="ambig-inline">⚠ multiple species — could be: <em>${escHtml(r.sci)}</em></span></td></tr>`;
+      const btns = (r._options || []).map(s =>
+        `<button class="ambig-pick-btn" onclick="resolveBatchAmbig(${i},'${s.replace(/'/g,"\\'")}')">${escHtml(s)}</button>`
+      ).join('');
+      return `<tr class="ambig-row"><td>${escHtml(r.input)}</td><td colspan="7"><span class="ambig-inline">⚠ multiple species — which one?</span><div class="ambig-picks">${btns}</div></td></tr>`;
     }
     const pestCell = r.pest ? `<span class="badge cat-pest-plant">Pest plant</span>` : '';
     const statusCell = r.status
@@ -1211,6 +1218,16 @@ function renderBatchTable(results) {
 }
 
 // ── Download CSV ──────────────────────────────────────────────────────────────
+function resolveBatchAmbig(idx, sciName) {
+  const original = batchResults[idx].input;
+  const resolved = batchMatch(sciName);
+  if (resolved) { resolved.input = original; batchResults[idx] = resolved; }
+  renderBatchTable(batchResults);
+  const anyMatched = batchResults.some(r => r.matched);
+  document.getElementById('batch-dl').disabled = !anyMatched;
+  document.getElementById('batch-dl-nvs').disabled = !anyMatched;
+}
+
 function downloadNVSTemplate() {
   const nvsColumns = ['blockcode','observation_method','abundance_class','observation_status','scientificname','observer','browsed','reqmgtnotes','easting','northing','plantednotes','notes','indicator','edge','planted','emergent','reqmgt','groundcover','epiphyte','understorey','canopy','keyinterest','dominantspecies','nativeinED','mapped'];
   const sciIdx = nvsColumns.indexOf('scientificname');
